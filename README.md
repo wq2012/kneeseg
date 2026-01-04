@@ -44,7 +44,7 @@ from kneeseg.bone_rf import BoneClassifier
 # 1. Load Data
 # Data should be .mhd/.raw or .hdr/.img
 image_path = 'data/image-001.mhd'
-image = load_volume(image_path)
+image, spacing = load_volume(image_path, return_spacing=True)
 
 # 2. Initialize Model
 # Example: Initialize the first-pass Bone Classifier
@@ -55,7 +55,30 @@ bone_rf = BoneClassifier(n_estimators=100, max_depth=25)
 pred_mask, prob_map = bone_rf.predict(image)
 
 # 4. Save Result
-save_volume(pred_mask, 'output/prediction.mhd', reference_image=image)
+save_volume(pred_mask, 'output/prediction.mhd', metadata={'spacing': spacing})
+```
+
+### Loading Pretrained Models
+
+To use models you have trained or downloaded (e.g., from the Hugging Face release), simply use the `load()` method:
+
+```python
+from kneeseg.bone_rf import BoneClassifier
+from kneeseg.rf_seg import CartilageClassifier
+
+# 1. Initialize empty classifiers
+# (Parameters must match training, or just use defaults if standard)
+bone_p1 = BoneClassifier()
+bone_p2 = BoneClassifier()
+cartilage_rf = CartilageClassifier()
+
+# 2. Load the weights
+bone_p1.load("path/to/bone_rf_p1.joblib")
+bone_p2.load("path/to/bone_rf_p2.joblib")
+cartilage_rf.load("path/to/cartilage_rf.joblib")
+
+# 3. Predict (Example: Bone Pass 1)
+pred_p1, prob_p1 = bone_p1.predict(image)
 ```
 
 ### Running the Pipeline (CLI)

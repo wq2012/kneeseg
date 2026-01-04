@@ -27,15 +27,28 @@ def inference_improved(config=None):
     out_cfg = config['output_config']
     
     image_dir = data_cfg['image_directory']
-    label_dir = data_cfg['label_directory']
-    split_file = data_cfg['split_file']
+    label_dir = data_cfg.get('label_directory') # Optional
+    split_file = data_cfg.get('split_file') # Optional
+    select_files = data_cfg.get('select_files') # Optional
+
     model_dir = model_cfg['model_directory']
     output_dir = out_cfg['prediction_directory']
     os.makedirs(output_dir, exist_ok=True)
     
-    with open(split_file, 'r') as f:
-        split = json.load(f)
-    test_files = split['eval'] # Predict on Eval set
+    test_files = []
+    if select_files:
+        test_files = select_files
+    elif split_file:
+        with open(split_file, 'r') as f:
+            split = json.load(f)
+        test_files = split.get('eval', [])
+    else:
+        # Fallback: All files in image directory (careful)
+        # Assuming user knows what they are doing if providing simple dir
+        files = [f for f in os.listdir(image_dir) if f.endswith('.mhd')]
+        test_files = sorted(files)
+        
+    print(f"Running on {len(test_files)} files...")
     
     print(f"Loading Models from {model_dir}...")
     try:
@@ -61,12 +74,14 @@ def inference_improved(config=None):
     print("Running Inference...")
     for f in tqdm(test_files):
         img_path = os.path.join(image_dir, f)
-        lbl_path = os.path.join(label_dir, f.replace('image', 'labels'))
         
-        if not os.path.exists(lbl_path): continue
-        
-        img = load_volume(img_path)
-        lbl = load_volume(lbl_path)
+        lbl = None
+        if label_dir:
+             lbl_path = os.path.join(label_dir, f.replace('image', 'labels'))
+             if os.path.exists(lbl_path):
+                 lbl = load_volume(lbl_path)
+
+        img, spacing = load_volume(img_path, return_spacing=True)
         
         # 1. Predict Bones (Pass 1)
         _, prob1 = bone_rf_p1.predict(img)
@@ -86,39 +101,52 @@ def inference_improved(config=None):
              cart_pred, _ = cart_rf.predict(img, bone_masks, proximity_mm=20.0)
         
         # 3. Evaluate
-        # Map Cartilage Pred (1, 2) to (1, 2) ?
-        # Cartilage RF y was: 0=Bg, 1=FemCart, 2=TibCart (based on labels[mask]?)
-        # Let's check training: y = lbl.flatten()[mask]. 
-        # lbl has 1=Femur, 2=FemCart, 3=Tibia, 4=TibCart.
-        # If mask is near bones, we might see 1,2,3,4.
-        # But we want to classify cartilage.
-        # Ideally, we should have trained binary or mapped labels.
-        # In `rf_seg.py` training: y = lbl.flatten()[mask].
-        # It takes whatever labels are in the mask.
-        # If the mask covers bones, it sees bones too.
-        # Result of predict is 1,2,3,4.
+        if lbl is not None:
+             pred_fem = (bone_pred == 1).astype(np.uint8)
+             pred_tib = (bone_pred == 2).astype(np.uint8)
+             pred_fc = (cart_pred == 2).astype(np.uint8)
+             pred_tc = (cart_pred == 4).astype(np.uint8)
+             
+             gt_fem = (lbl == 1).astype(np.uint8)
+             gt_fc = (lbl == 2).astype(np.uint8)
+             gt_tib = (lbl == 3).astype(np.uint8)
+             gt_tc = (lbl == 4).astype(np.uint8)
+             
+             s = {
+                 'Femur': calculate_dice(pred_fem, gt_fem),
+                 'Tibia': calculate_dice(pred_tib, gt_tib),
+                 'Femoral Cartilage': calculate_dice(pred_fc, gt_fc),
+                 'Tibial Cartilage': calculate_dice(pred_tc, gt_tc)
+             }
+             scores[f] = s
+             print(f"  {f}: {s}")
+             
+        # Save Prediction
+        # Reconstruct label map: 0=Bg, 1=Fem, 2=FemCart, 3=Tib, 4=TibCart
+        # Bone Pred: 1, 2. Cart Pred: 1, 2, 3, 4 (raw)
+        # We need to merge. 
+        # Actually current CartPred logic is independent?
+        # Let's check cartilage_rf.predict logic.
+        # It returns `pred_map` where labels are from the training set.
+        # If we assume training labels were 1,2,3,4.
         
-        # So we separate:
-        pred_fc = (cart_pred == 2).astype(np.uint8)
-        pred_tc = (cart_pred == 4).astype(np.uint8)
+        # We want to save the final segmentation.
+        # Simple merge:
+        final_seg = np.zeros_like(img, dtype=np.uint8)
         
-        # Also evaluate Bones
-        pred_fem = (bone_pred == 1).astype(np.uint8)
-        pred_tib = (bone_pred == 2).astype(np.uint8)
+        # Add Bones
+        final_seg[bone_pred == 1] = 1
+        final_seg[bone_pred == 2] = 3
         
-        gt_fem = (lbl == 1).astype(np.uint8)
-        gt_fc = (lbl == 2).astype(np.uint8)
-        gt_tib = (lbl == 3).astype(np.uint8)
-        gt_tc = (lbl == 4).astype(np.uint8)
-        
-        s = {
-            'Femur': calculate_dice(pred_fem, gt_fem),
-            'Tibia': calculate_dice(pred_tib, gt_tib),
-            'Femoral Cartilage': calculate_dice(pred_fc, gt_fc),
-            'Tibial Cartilage': calculate_dice(pred_tc, gt_tc)
-        }
-        scores[f] = s
-        print(f"  {f}: {s}")
+        # Add Cartilage (Overwrite bones at boundary? or priority?)
+        # Usually cartilage classifier is more specific near boundaries?
+        # Or just trust cartilage classifier if it predicts cartilage?
+        if cart_rf is not None:
+            # Cartilage labels: 2 (FemCart), 4 (TibCart)
+            final_seg[cart_pred == 2] = 2
+            final_seg[cart_pred == 4] = 4
+            
+        save_volume(final_seg, os.path.join(output_dir, f.replace('image', 'labels')), metadata={'spacing': spacing})
         
     # Summary
     print("\n--- Improved Results ---")
