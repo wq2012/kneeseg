@@ -11,7 +11,7 @@
 
 |                 | Original MICCAI Workshop Paper | This Implementation |
 |-----------------|----------------|---------------------|
-| **Bone Segmentation** | Active Shape Model (Siemens proprietary) | Dense Random Forest (Auto-Context) |
+| **Bone Segmentation** | Active Shape Model (Siemens proprietary) | Dense Auto-Context Random Forest (Python) |
 | **Cartilage Segmentation** | [Semantic Context Forest (C++)](https://github.com/wq2012/DecisionForest) | Semantic Context Forest (Python) |
 | **Dataset** |  Osteoarthritis Initiative (OAI) | [SKI10](https://ski10.grand-challenge.org/) |
 
