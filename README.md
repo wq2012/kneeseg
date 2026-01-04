@@ -7,7 +7,7 @@
 [![Downloads](https://static.pepy.tech/badge/kneeseg)](https://pepy.tech/project/kneeseg)
 
 
-**kneeseg** is a Python reimplementation of the paper "Semantic Context Forests for Learning-Based Knee Cartilage Segmentation in 3D MR Images". [[paper](resources/knee_MCV_2013_paper.pdf)] [[slides](resources/knee_MCV_2013_slides.pdf)]
+**kneeseg** is a Python reimplementation of the paper "Semantic Context Forests for Learning-Based Knee Cartilage Segmentation in 3D MR Images". [[paper](resources/knee_MCV_2013_paper.pdf)] [[slides](resources/knee_MCV_2013_slides.pdf)] [[poster](resources/knee_MCV_2013_poster.pdf)]
 
 |                 | Original MICCAI Workshop Paper | This Implementation |
 |-----------------|----------------|---------------------|
