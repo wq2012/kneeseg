@@ -1,0 +1,30 @@
+{
+  "train": [
+    "image-001.mhd", "image-002.mhd", "image-003.mhd", "image-004.mhd", "image-005.mhd",
+    "image-006.mhd", "image-007.mhd", "image-008.mhd", "image-009.mhd", "image-010.mhd",
+    "image-011.mhd", "image-012.mhd", "image-013.mhd", "image-014.mhd", "image-015.mhd",
+    "image-016.mhd", "image-017.mhd", "image-018.mhd", "image-019.mhd", "image-020.mhd",
+    "image-021.mhd", "image-022.mhd", "image-023.mhd", "image-024.mhd", "image-025.mhd",
+    "image-026.mhd", "image-027.mhd", "image-028.mhd", "image-029.mhd", "image-030.mhd",
+    "image-031.mhd", "image-032.mhd", "image-033.mhd", "image-034.mhd", "image-035.mhd",
+    "image-036.mhd", "image-037.mhd", "image-038.mhd", "image-039.mhd", "image-040.mhd",
+    "image-041.mhd", "image-042.mhd", "image-043.mhd", "image-044.mhd", "image-045.mhd",
+    "image-046.mhd", "image-047.mhd", "image-048.mhd", "image-049.mhd", "image-050.mhd",
+    "image-051.mhd", "image-052.mhd", "image-053.mhd", "image-054.mhd", "image-055.mhd",
+    "image-056.mhd", "image-057.mhd", "image-058.mhd", "image-059.mhd", "image-060.mhd",
+    "image-061.mhd", "image-062.mhd", "image-063.mhd", "image-064.mhd", "image-065.mhd",
+    "image-066.mhd", "image-067.mhd", "image-068.mhd", "image-069.mhd", "image-070.mhd",
+    "image-071.mhd", "image-072.mhd", "image-073.mhd", "image-074.mhd", "image-075.mhd",
+    "image-076.mhd", "image-077.mhd", "image-078.mhd", "image-079.mhd", "image-080.mhd",
+    "image-081.mhd", "image-082.mhd", "image-083.mhd", "image-084.mhd", "image-085.mhd",
+    "image-086.mhd", "image-087.mhd", "image-088.mhd", "image-089.mhd", "image-090.mhd",
+    "image-091.mhd", "image-092.mhd", "image-093.mhd", "image-094.mhd", "image-095.mhd",
+    "image-096.mhd", "image-097.mhd", "image-098.mhd", "image-099.mhd", "image-100.mhd"
+  ],
+  "eval": [
+    "image-004.mhd", "image-005.mhd", "image-012.mhd", "image-014.mhd", "image-015.mhd",
+    "image-018.mhd", "image-028.mhd", "image-029.mhd", "image-030.mhd", "image-032.mhd",
+    "image-036.mhd", "image-055.mhd", "image-065.mhd", "image-070.mhd", "image-076.mhd",
+    "image-082.mhd", "image-087.mhd", "image-089.mhd", "image-095.mhd", "image-098.mhd"
+  ]
+}
