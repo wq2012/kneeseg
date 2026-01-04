@@ -10,6 +10,14 @@
 | **Cartilage Segmentation** | [Semantic Context Forest (C++)](https://github.com/wq2012/DecisionForest) | Semantic Context Forest (Python) |
 | **Dataset** |  Osteoarthritis Initiative (OAI) | [SKI10](https://ski10.grand-challenge.org/) |
 
+## Table of Contents
+1. [Installation](#installation)
+2. [Usage](#usage)
+3. [Experiments Folder](#experiments-folder)
+4. [Experiment Results (SKI10)](#experiment-results-ski10)
+5. [Algorithm Details](#algorithm-details)
+6. [Citation](#citation)
+
 ## Installation
 
 You can install the package via pip:
@@ -34,6 +42,8 @@ The package includes a unified pipeline script `kneeseg-pipeline` (or via python
 # Run using the installed command
 kneeseg-pipeline --data-dir /path/to/SKI10/data
 ```
+
+> For advanced usage and reproduction scripts (e.g., training models from scratch), please refer to the [Experiments Documentation](experiments/README.md).
 
 ## Experiments Folder
 The `experiments/` directory contains reproduceable scripts and will store the output models (`models/`) and predictions (`predictions/`) if you run the scripts provided there. See [experiments/README.md](experiments/README.md) for details.
