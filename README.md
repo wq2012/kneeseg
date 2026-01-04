@@ -1,8 +1,14 @@
-# kneeseg: Knee Cartilage Segmentation
+# kneeseg: Knee Bone & Cartilage Segmentation in 3D MRI
 
-**kneeseg** is a Python reimplementation of the **Semantic Context Forests** for Learning-Based Knee Cartilage Segmentation in 3D MR Images.
+**kneeseg** is a Python reimplementation of the paper "Semantic Context Forests for Learning-Based Knee Cartilage Segmentation in 3D MR Images".
 
-> **Note**: This is a modern Python implementation and is **not** the original C++ code used in the MICCAI 2013 paper. It replaces the original Active Shape Model (ASM) with a robust Dense Random Forest (Auto-Context) approach.
+> **Note**: This is a modern Python implementation and is **NOT** the original C++ code used in the MICCAI 2013 Workshop paper. It replaces the original Active Shape Model (ASM) with a robust Dense Random Forest (Auto-Context) approach as the original ASM implementation was Siemens proprietary code.
+
+|                 | Original Paper | This Implementation |
+|-----------------|----------------|---------------------|
+| **Bone Segmentation** | Active Shape Model (Siemens proprietary) | Dense Random Forest (Auto-Context) |
+| **Cartilage Segmentation** | Semantic Context Forest (C++) | Semantic Context Forest (Python) |
+| **Dataset** |  Osteoarthritis Initiative (OAI) | SKI10 |
 
 ## Installation
 
@@ -33,15 +39,15 @@ kneeseg-pipeline --data-dir /path/to/SKI10/data
 The `experiments/` directory contains reproduceable scripts and will store the output models (`models/`) and predictions (`predictions/`) if you run the scripts provided there. See [experiments/README.md](experiments/README.md) for details.
 
 ## Experiment Results (SKI10)
-We evaluated the pipeline on a **20% hold-out set** (20 cases) from the SKI10 training data (Total 80 cases: 60 Train, 20 Eval).
+Since the [SKI10 dataset](https://ski10.grand-challenge.org/) doesn not provide the ground truth labels for its default testing set, we evaluated the pipeline on a **20% hold-out set** (20 cases) from the SKI10 training data (Total 80 cases: 60 Train, 20 Eval).
 
 ### Metrics
 | Structure | Dice Similarity Coefficient (DSC) |
 |-----------|-----------------------------------|
-| **Femur** | **0.9046 ± 0.0361** |
-| **Tibia** | **0.9292 ± 0.0260** |
-| **Femoral Cartilage** | **0.5944 ± 0.0654** |
-| **Tibial Cartilage** | **0.5805 ± 0.0533** |
+| **Femur** | 0.9046 ± 0.0361 |
+| **Tibia** | 0.9292 ± 0.0260** |
+| **Femoral Cartilage** | 0.5944 ± 0.0654 |
+| **Tibial Cartilage** | 0.5805 ± 0.0533 |
 
 ### Evaluation Set
 The following 20 cases were held out for evaluation:
@@ -68,6 +74,33 @@ The following 20 cases were held out for evaluation:
     - **Performance**: Achieves ~0.60 DSC.
 
 ## Citation
-```
-Wang, Quan, et al. "Semantic context forests for learning-based knee cartilage segmentation in 3D MR images." MICCAI Medical Computer Vision Workshop, 2013.
+
+**Plain Text:**
+
+> Quan Wang, Dijia Wu, Le Lu, Meizhu Liu, Kim L. Boyer, and Shaohua Kevin Zhou.
+> "Semantic Context Forests for Learning-Based Knee Cartilage Segmentation in 3D MR Images."
+> MICCAI 2013: Workshop on Medical Computer Vision.
+
+> Quan Wang.
+> Exploiting Geometric and Spatial Constraints for Vision and Lighting Applications.
+> Ph.D. dissertation, Rensselaer Polytechnic Institute, 2014.
+
+**BibTeX:**
+
+```bibtex
+@inproceedings{wang2013semantic,
+  title={Semantic context forests for learning-based knee cartilage segmentation in 3D MR images},
+  author={Wang, Quan and Wu, Dijia and Lu, Le and Liu, Meizhu and Boyer, Kim L and Zhou, Shaohua Kevin},
+  booktitle={International MICCAI Workshop on Medical Computer Vision},
+  pages={105--115},
+  year={2013},
+  organization={Springer}
+}
+
+@phdthesis{wang2014exploiting,
+  title={Exploiting Geometric and Spatial Constraints for Vision and Lighting Applications},
+  author={Quan Wang},
+  year={2014},
+  school={Rensselaer Polytechnic Institute},
+}
 ```
