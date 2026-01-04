@@ -60,6 +60,9 @@ save_volume(pred_mask, 'output/prediction.mhd', metadata={'spacing': spacing})
 
 ### Loading Pretrained Models
 
+Pretrained models (trained on all 100 SKI10 training cases) are available on Hugging Face:
+- **Hugging Face Hub**: [https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10)
+
 To use models you have trained or downloaded (e.g., from the Hugging Face release), simply use the `load()` method:
 
 ```python
