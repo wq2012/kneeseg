@@ -1,14 +1,14 @@
 # kneeseg: Knee Bone & Cartilage Segmentation in 3D MRI
 
+[![Python Package](https://github.com/wq2012/kneeseg/actions/workflows/python-package.yml/badge.svg)](https://github.com/wq2012/kneeseg/actions/workflows/python-package.yml)
+
 **kneeseg** is a Python reimplementation of the paper "Semantic Context Forests for Learning-Based Knee Cartilage Segmentation in 3D MR Images".
 
-> **Note**: This is a modern Python implementation and is **NOT** the original C++ code used in the MICCAI 2013 Workshop paper. It replaces the original Active Shape Model (ASM) with a robust Dense Random Forest (Auto-Context) approach as the original ASM implementation was Siemens proprietary code.
-
-|                 | Original Paper | This Implementation |
+|                 | Original MICCAI Workshop Paper | This Implementation |
 |-----------------|----------------|---------------------|
 | **Bone Segmentation** | Active Shape Model (Siemens proprietary) | Dense Random Forest (Auto-Context) |
-| **Cartilage Segmentation** | Semantic Context Forest (C++) | Semantic Context Forest (Python) |
-| **Dataset** |  Osteoarthritis Initiative (OAI) | SKI10 |
+| **Cartilage Segmentation** | [Semantic Context Forest (C++)](https://github.com/wq2012/DecisionForest) | Semantic Context Forest (Python) |
+| **Dataset** |  Osteoarthritis Initiative (OAI) | [SKI10](https://ski10.grand-challenge.org/) |
 
 ## Installation
 
@@ -45,7 +45,7 @@ Since the [SKI10 dataset](https://ski10.grand-challenge.org/) doesn not provide 
 | Structure | Dice Similarity Coefficient (DSC) |
 |-----------|-----------------------------------|
 | **Femur** | 0.9046 ± 0.0361 |
-| **Tibia** | 0.9292 ± 0.0260** |
+| **Tibia** | 0.9292 ± 0.0260 |
 | **Femoral Cartilage** | 0.5944 ± 0.0654 |
 | **Tibial Cartilage** | 0.5805 ± 0.0533 |
 
