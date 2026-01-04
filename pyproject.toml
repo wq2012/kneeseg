@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kneeseg"
-version = "0.1.0"
-description = "A Python reimplementation of Semantic Context Forests for Knee Cartilage Segmentation"
+version = "0.1.1"
+description = "A Python reimplementation of Semantic Context Forests for Learning-Based Knee Cartilage Segmentation in 3D MR Images"
 readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"

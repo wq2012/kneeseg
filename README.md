@@ -18,10 +18,19 @@
 ## Table of Contents
 1. [Installation](#installation)
 2. [Usage](#usage)
+    - [As a Library](#as-a-library)
+    - [Loading Pretrained Models](#loading-pretrained-models)
+    - [Running the Pipeline (CLI)](#running-the-pipeline-cli)
 3. [Configuration](#configuration)
+    - [Structure](#structure)
+    - [Example Configuration](#example-configuration)
 4. [Experiments Folder](#experiments-folder)
 5. [Experiment Results (SKI10)](#experiment-results-ski10)
+    - [Metrics](#metrics)
+    - [Evaluation Set](#evaluation-set)
 6. [Algorithm Details](#algorithm-details)
+    - [Bone Segmentation (Dense Auto-Context RF)](#bone-segmentation-dense-auto-context-rf)
+    - [Cartilage Segmentation (Semantic Context Forest)](#cartilage-segmentation-semantic-context-forest)
 7. [Citation](#citation)
 
 ## Installation
