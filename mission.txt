@@ -1,0 +1,111 @@
+This directory contains a project completed in Siemens in 2012 on knee bone and cartilage segmentation in 3D MRI images.
+
+This entire directory is extremely messy and unorganized, containing data, code, experimental scripts and external executable tools. The naming and structure of files are very chaotic and can be often very confusing.
+
+The paper and slides are available in the "Paper, Docs and slides" dir.
+
+I want you to act as a researcher and software engineer to study this project directory carefully, and ultimately produce a new subdirectory called "delivery". This delivery directory should contain a full reproduction of this project, with clear documentation and instructions on how to use it, and all the necessary code to reproduce the experiments.
+
+The delivery should include:
+1. Core algorithm implementations, for both bone segmentation and cartilage segmentation.
+2. 3D image data reading, writing, and visualization tools for both OAI and SKI10 datasets.
+3. Model training and evaluation scripts, which takes configurations files (e.g. in JSON or YML format specifying things like data path, output path, and experiment configurations)
+4. Unit tests and integration tests.
+5. README.md file with table of contents, with details instructions on how to use this delivered library.
+
+Additional information that could be helpful:
+1. There are two datasets, the Osteoarthritis Initiative (OAI) dataset, and the SKI10 datasets. There might be experiments for both.
+2. For the OAI data, each image has two files, a header file that ends with .hdr, which is a pure text file containing metadata; and an image file that ends with .img containing binary raw data. There should be some code somewhere reading (or maybe also writing) such images.
+3. This project is mainly about knee cartilage segmentation, assuming that the bone segmentation (either ground truth or segmentation produced by another tool) is already available.
+
+
+Requirements:
+1. Although this project is mostly using C++ and Matlab/Octave, you are free to deliver the software in any programming language that makes most sense, such as Python.
+2. The delivery should include software for both bone segmentation and cartilage segmentation, even if the original project may not include code for bone segmentation. This is the biggest challenge for you. You may need to read papers, do the research, implement the algorithms, and make sure they work as intended. You also have lots of freedom here, to modify the algorithm and do whatever that makes the most sense.
+3. Consider this "delivery" as a full software solution for the problem of knee bone and Cartilage segmentation in 3D MRI images. People can download this delivered software and use it in real world applications to solve real problems. Imaging this software is deployed in the cloud service where people use it for 3D MRI medical image analysis for real patients.
+4. Also consider this "delivery" as the software package that will be submitted together with the paper for revewiers to rate the "reproducibility" of the paper - other researchers should be able to reproduce the paper freely using the software we delivered, assuming they have access to the OAI and SKI10 datasets.
+5. Code should be well formatted, with details comments and docstring explaining the algorithms and functionality of each file.
+
+More information on bone segmentation pipeline used in this paper:
+• Step 1: Construct correspondence meshes using 
+Coherent Point Drift [1]
+• Step 2: Train PCA models for each bone [2]
+• Step 3: Detect bones in images using PCA models
+• Step 4: Use random walks to refine segmentation [3]
+• [1] A. Myronenko and X. Song. Point set registration: Coherent point drift. IEEE Transactions on 
+Pattern Analysis and Machine Intelligence, 32(12):2262–2275, Dec. 2010.
+• [2] T. Cootes, C. Taylor, D. Cooper, and J. Graham. Active shape models–their training and 
+application. Computer Vision and Image Understanding, 61(1):38–59, 1995.
+• [3] L. Grady. Random walks for image segmentation. IEEE Transactions on Pattern Analysis and 
+Machine Intelligence, 28(11):1768–1783, Nov. 2006.
+
+---
+
+
+It seems your train.py and predict.py still has lots of commented code and TODOs.
+
+I don't think this is complete. I would like you to complete these scripts. The requirement is that, by running the train.py script, with the specified config file, it will complete all the training tasks, and at the end of the training, it prints out where the output models are stored.
+
+For the predict.py, the user the specify either a single image or a folder of images as the input via config, and the script will produce the full bone and cartilage segmentation results in the output directory.
+
+We should also have an evaluation script, where user specified the path to the prediction and the path to the ground truth, then it will compute the metrics, including the Dice similarity coefficient (DSC) for all the 3 bones and all the 3 cartilages, and produce an evaluation report file, containing metrics of all images, and aggregated metrics including mean and std for each DSC.
+
+---
+
+Now I have added the SKI10 data in the Data/SKI10 folder, including both training data and test data. Since the test data do not have labels, let's not use it. Let's use 80% of the training data for your training experiments, and the rest of the 20% training data as your evaluation data.
+
+Please create a experiments directory, to perform a full training, prediction, and evaluation workflow, using the library you just created.
+
+In this directory, you should have your training config, predict config. You should save your trained models also in this directory. You should finally generate your evaluation report in this directory.
+
+If anything breaks or fails or looks suspicious, please fix the issues.
+
+Now please proceed with the experiments.
+
+---
+
+Beofre you continue, I would like you to improve the structure of the json config:
+It should be more structured, including different blocks, e.g. data_config, training_config, eval_config, output_config, etc. (you don't have to strictly follow my example, just do whatever makes most sense and would be most readable) Also for bone segmentation vs cartilage segmentation, the parameters should go to different blocks. Also, the names of the fields should be more readable, even if they might be a bit lengthy (but not too long), such that the config is very readable by itself, without requiring the user to read the jsonschema. The jsonschema should include even more details in the descriptions.
+
+For the data config, it should include directories for both images and labels (but assuming the file names are the same in these directories). For training, both images and ground truth labels are required. For prediction, only images are needed. For evaluation, the predicted labels are needed, and the ground truth labels are also needed. Actually, I would suggest you to merge the predict and evaluate scripts into a single one, and make it configurable whether to run evaluation.
+
+For the experiments, I would like you to change your strategy:
+1. Start with a very small subset of training data and eval data, instead of 80% and 20% of all data.
+2. Start with very small models, and small number of training steps.
+3. Make sure the scripts work end to end, and is able to produce the models, the predictions, and the evaluation report, even if the metrics won't be ideal.
+
+Let me know when these are all complete. After it's done, we can discuss how to proceed for next steps such as large scale training with more data with larger models and more steps.
+
+---
+
+For the SKI10 experiments, it is great that the DSCs for femur bone and tibia bone are pretty high, all above 75%.
+
+But for the femoral cartilage and tibial cartilage, the DSCs are very low. Femoreal cartilage DSC is only ~15%, and tibial cartilage DSC is smaller than 1%. So there are apparently problems with cartilage segmentation algorithms.
+
+Please research on how to improve cartilage DSC. I have some ideas below:
+1. Make sure we use all the features from the original paper.
+1.1 Intensity-Based Features, such as Intensity value, and Gradient magnitude.
+1.2 Distance-Based Features. We perform signed distance transform to each segmented bone. The signed distances at each voxel, and their linear combinations comprise our features. If a voxel is inside a bone, the signed distance is negative, and if a voxel is outside a bone, the signed distance is positive.
+1.3 The distances to densely registered bone landmarks. We measure the distance from a voxel to each landmark on the joint bone mesh.
+1.4 Random shift intensity difference (RSID) feature. It is important to note that for the original paper, the spatial shift is randomly generated at training time. It is very likely that in this new Python implementation, as we are using scikit-learn's random forest implementation, the random shift is not generated at training time. This could be a reason for the cartilage DSC regression.
+1.5 It is worth noting that "Distances to landmarks" and "RSID" involve random parameters (which landmark, and what shift), thus they are both "feature groups", not single features.
+2. If the DSC numbers for the bones are good enough, we should consider also using the same algorithm for cartilage. That means, take the existing algorithm that we used for bone segmentation, but instead of only using it for bone segmentation, we use it for joint bone and cartilage segmentation at the same time. This means the bone segmentation algorithm will directly produce the bone segmentation result, and the initial cartilage segmentation result. Then in the second stage, when we use random forest for final cartilage segmentation, we also leverage the initial cartilage segmentation result to extract features. For example, for the "distances to densely registered bone landmarks" features, we can use landmarks from both all the bones, and all the initial cartilage segmentation results.
+3. Data augmentation. It is possible to apply data augmentation at training time, to increase the diversity of the training data. For example, for the 3D image, you can apply a very small random rotation or translation to the image and the ground truth labels at the same time. You can also apply small noise  or intensity scaling to the image, while keeping the ground truth labels unchanged.
+4. Check your algorithm and implementation of the cartilage segmentation algorithm, to see if there is anything wrong or very inconsistent with the original paper.
+
+---
+
+Yes, I would like you to implement this idea.
+
+Also, I would like you to rename the files.
+
+bone_seg.py -> if you use this for both bone and cartilage segmentation for the initial results, you should rename this to be something more accurate, e.g. initial_seg.py, or asm_seg.py, or anything that makes most of the sense.
+
+cartilage_seg.py -> similarly, name it to be reflect what it exactly does.
+
+Also, I would like you to refactor train.py and inference.py a bit, such that can be either be used as binary executable python scripts (this is the current way), or as a module.
+
+Just imagine that the entire delivery folder will be uploaded to pypi as a python package, and people can just import the package and do everything including calling training and inference functions by passing in the config, without actually downloading the source code of the package.
+
+After you've done all the refactoring and renaming, validate it end to end with the tiny experiment, then directly proceed to the full SKI10 experiment to see how much improvement we can get for the cartilage segmentation results.
+

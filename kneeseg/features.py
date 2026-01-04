@@ -1,0 +1,214 @@
+import numpy as np
+from scipy.ndimage import distance_transform_edt, gaussian_gradient_magnitude, gaussian_filter
+
+def compute_signed_distance_transforms(bone_masks, spacing=None):
+    """
+    Computes Signed Distance Transforms (SDT) for each bone mask.
+    Negative inside bone, positive outside.
+    """
+    sdts = {}
+    for name, mask in bone_masks.items():
+        if np.any(mask > 0):
+            d_out = distance_transform_edt(1 - mask, sampling=spacing).astype(np.float32)
+            d_in = distance_transform_edt(mask, sampling=spacing).astype(np.float32)
+            sdts[name] = d_out - d_in
+        else:
+            sdts[name] = np.full(mask.shape, 100.0, dtype=np.float32)
+    return sdts
+
+def compute_dts_from_landmarks(image_shape, landmarks_dict, spacing=None):
+    """
+    Computes Unsigned Distance Transforms from sparse landmarks.
+    Used for consistency between Train (ASM) and Inference.
+    """
+    dts = {}
+    for name, pts in landmarks_dict.items():
+        if 'patella' in name: continue 
+        
+        mask_pts = np.zeros(image_shape, dtype=np.uint8)
+        if len(pts) > 0:
+            c = np.round(pts).astype(int)
+            c[:, 0] = np.clip(c[:, 0], 0, image_shape[0]-1)
+            c[:, 1] = np.clip(c[:, 1], 0, image_shape[1]-1)
+            c[:, 2] = np.clip(c[:, 2], 0, image_shape[2]-1)
+            mask_pts[c[:,0], c[:,1], c[:,2]] = 1
+            
+            dist = distance_transform_edt(1 - mask_pts, sampling=spacing).astype(np.float32)
+            dts[name] = dist
+        else:
+            dts[name] = np.full(image_shape, 200.0, dtype=np.float32)
+    return dts
+
+def compute_rsid_features(image, num_shifts=30, max_shift=10, seed=42, mask=None):
+    """
+    Computes Random Shift Intensity Difference (RSID) features only at mask locations.
+    Returns (num_masked_voxels, num_shifts) if mask provided, else full volume.
+    """
+    np.random.seed(seed)
+    offsets = np.random.randint(-max_shift, max_shift + 1, size=(num_shifts, 3))
+    
+    if mask is None:
+        # Fallback to full volume if no mask (used in training initialization sometimes)
+        padded = np.pad(image, max_shift, mode='edge')
+        z, y, x = image.shape
+        base_slice = padded[max_shift:max_shift+z, max_shift:max_shift+y, max_shift:max_shift+x]
+        features = []
+        for i in range(num_shifts):
+            dz, dy, dx = offsets[i]
+            features.append(base_slice - padded[max_shift+dz : max_shift+z+dz,
+                                               max_shift+dy : max_shift+y+dy,
+                                               max_shift+dx : max_shift+x+dx])
+        return np.stack(features, axis=-1).astype(np.float32)
+
+    # Masked computation
+    if mask.ndim == 3:
+        mask_indices = np.argwhere(mask)
+    else:
+        # If mask is 1D, we can't easily do spatial shifts without the original indices
+        # But in this pipeline, mask is usually 3D ROI or 1D flat from 3D.
+        # We assume 3D mask for spatial efficiency.
+        raise ValueError("RSID requires a 3D mask for spatial optimization.")
+
+    n_vox = len(mask_indices)
+    rsid_features = np.zeros((n_vox, num_shifts), dtype=np.float32)
+    
+    # Pad image once
+    padded = np.pad(image, max_shift, mode='edge')
+    
+    # Base intensities at mask locations (offset by padding)
+    base_indices = mask_indices + max_shift
+    base_vals = padded[base_indices[:,0], base_indices[:,1], base_indices[:,2]]
+    
+    for i in range(num_shifts):
+        dz, dy, dx = offsets[i]
+        shifted_indices = base_indices + [dz, dy, dx]
+        shifted_vals = padded[shifted_indices[:,0], shifted_indices[:,1], shifted_indices[:,2]]
+        rsid_features[:, i] = base_vals - shifted_vals
+        
+    return rsid_features
+
+def compute_landmark_features(image_shape, landmarks_dict, indices_dict, mask=None, spacing=None):
+    """
+    Computes distance to landmarks only at mask locations.
+    Operates in Physical Space (MM) if spacing provided.
+    """
+    if mask is not None:
+        if mask.ndim == 3:
+            coords = np.argwhere(mask).astype(np.float32)
+        else: # 1D flattened mask indices
+            # Convert 1D indices to 3D coords
+            flat_idx = np.nonzero(mask)[0]
+            coords = np.array(np.unravel_index(flat_idx, image_shape)).T.astype(np.float32)
+    else:
+        # Full volumegrid - expensive!
+        z, y, x = np.mgrid[0:image_shape[0], 0:image_shape[1], 0:image_shape[2]]
+        coords = np.stack([z.flatten(), y.flatten(), x.flatten()], axis=1).astype(np.float32)
+
+    if spacing is not None:
+        coords = coords * spacing
+
+    features = []
+    for bone in sorted(landmarks_dict.keys()):
+        points = landmarks_dict[bone]
+        indices = indices_dict.get(bone, [])
+        for idx in indices:
+            if idx < len(points):
+                p = points[idx]
+                dist = np.sqrt(np.sum((coords - p)**2, axis=1))
+                features.append(dist.astype(np.float32))
+            else:
+                features.append(np.full(len(coords), 200.0, dtype=np.float32))
+    return features
+
+def compute_dt_arithmetic_features(dts, mask=None):
+    features = []
+    if 'femur' in dts and 'tibia' in dts:
+        f = dts['femur']
+        t = dts['tibia']
+        if mask is not None:
+            # Handle mismatch if f is 3D and mask is Flat
+            if f.ndim == 3 and mask.ndim == 1:
+                f = f.flatten()
+                t = t.flatten()
+            elif f.ndim == 3 and mask.ndim == 3:
+                # Normal 3D indexing
+                pass
+            f = f[mask]
+            t = t[mask]
+        features.append(f + t) 
+        features.append(f - t) 
+    return features
+
+def extract_features(image, dts, sigma=1.0, mask=None, r_shifts=30, landmarks_dict=None, landmark_indices=None, prob_map=None, spacing=None):
+    """
+    Optimized feature extraction that avoids 4D intermediate arrays and respects masks.
+    """
+    img_mean = image.mean()
+    img_std = image.std()
+    image_norm = (image.astype(np.float32) - img_mean) / (img_std + 1e-6)
+
+    def get_masked(arr):
+        if mask is not None:
+            if mask.ndim == arr.ndim:
+                return arr[mask].astype(np.float32)
+            else:
+                return arr.flatten()[mask].astype(np.float32)
+        return arr.flatten().astype(np.float32)
+
+    features = []
+    
+    # 1. Intensity
+    features.append(get_masked(image_norm))
+    
+    # 2. Gaussian
+    features.append(get_masked(gaussian_filter(image_norm, sigma=sigma)))
+    
+    # 3. Gradient
+    features.append(get_masked(gaussian_gradient_magnitude(image_norm, sigma=sigma)))
+    
+    # 5. DTs
+    for bone in sorted(dts.keys()):
+        features.append(get_masked(dts[bone]))
+        
+    # 6. DT Arithmetic
+    dt_arith = compute_dt_arithmetic_features(dts, mask=mask)
+    for f in dt_arith:
+        features.append(f.astype(np.float32))
+        
+    # 7. RSID (Mask-aware)
+    if mask is not None and mask.ndim == 3:
+        rsid_masked = compute_rsid_features(image_norm, num_shifts=r_shifts, max_shift=10, mask=mask)
+        for i in range(rsid_masked.shape[1]):
+            features.append(rsid_masked[:, i])
+    else:
+        # Fallback to full then mask (wasteful)
+        rsid_full = compute_rsid_features(image_norm, num_shifts=r_shifts, max_shift=10)
+        for i in range(rsid_full.shape[-1]):
+            features.append(get_masked(rsid_full[..., i]))
+
+    # 8. Landmarks
+    if landmarks_dict and landmark_indices:
+        lm_features = compute_landmark_features(image.shape, landmarks_dict, landmark_indices, mask=mask, spacing=spacing)
+        for f in lm_features:
+            features.append(f)
+            
+    # 9. Probability (Auto-Context)
+    if prob_map is not None:
+        if prob_map.ndim == 3: channels = [prob_map]
+        else: channels = [prob_map[..., c] for c in range(prob_map.shape[-1])]
+        
+        for p_ch in channels:
+            features.append(get_masked(p_ch))
+            features.append(get_masked(gaussian_filter(p_ch, sigma=sigma)))
+            
+            # Context RSID
+            if mask is not None and mask.ndim == 3:
+                rsid_p = compute_rsid_features(p_ch, num_shifts=15, max_shift=15, mask=mask)
+                for i in range(rsid_p.shape[1]):
+                    features.append(rsid_p[:, i])
+            else:
+                rsid_p_full = compute_rsid_features(p_ch, num_shifts=15, max_shift=15)
+                for i in range(rsid_p_full.shape[-1]):
+                    features.append(get_masked(rsid_p_full[..., i]))
+    
+    return np.stack(features, axis=1)

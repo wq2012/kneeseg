@@ -1,0 +1,4 @@
+include kneeseg/configs/*.json
+include kneeseg/data/*.json
+include README.md
+recursive-include kneeseg *.json

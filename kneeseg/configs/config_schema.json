@@ -1,0 +1,144 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Knee Segmentation Configuration",
+    "type": "object",
+    "properties": {
+        "data_config": {
+            "type": "object",
+            "description": "Configuration for data directories and file lists",
+            "properties": {
+                "image_directory": {
+                    "type": "string",
+                    "description": "Path to the directory containing input image volumes (e.g., .mhd or .hdr files)."
+                },
+                "label_directory": {
+                    "type": "string",
+                    "description": "Path to the directory containing ground truth label volumes. Required for training and optional evaluation."
+                },
+                "split_file": {
+                    "type": "string",
+                    "description": "Optional path to a JSON file defining 'train' and 'eval' file lists."
+                },
+                "select_files": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Explicit list of filenames to process. If provided, overrides all other filtering."
+                }
+            },
+            "required": [
+                "image_directory"
+            ],
+            "additionalProperties": false
+        },
+        "training_config": {
+            "type": "object",
+            "description": "Parameters for model training",
+            "properties": {
+                "augmentation": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether to apply random data augmentation (rotation, noise) during training."
+                },
+                "bone_parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pca_components": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Number of principal components for the Active Shape Model."
+                        },
+                        "subsample_points": {
+                            "type": "integer",
+                            "default": 1000,
+                            "description": "Number of surface points to sample per case for PCA training."
+                        }
+                    },
+                    "additionalProperties": false
+                },
+                "cartilage_parameters": {
+                    "type": "object",
+                    "properties": {
+                        "n_estimators": {
+                            "type": "integer",
+                            "default": 100,
+                            "description": "Number of trees in the Random Forest classifier."
+                        },
+                        "max_depth": {
+                            "type": "integer",
+                            "default": 15,
+                            "description": "Maximum depth of the Random Forest trees."
+                        },
+                        "subsample_voxels_per_case": {
+                            "type": "integer",
+                            "default": 50000,
+                            "description": "Max number of voxels to sample per training case to balance speed and memory."
+                        },
+                        "training_proximity_mm": {
+                            "type": "number",
+                            "default": 10.0,
+                            "description": "Proximity (in mm) to bone surfaces for selecting cartilage training samples."
+                        }
+                    },
+                    "additionalProperties": false
+                }
+            },
+            "additionalProperties": false
+        },
+        "inference_config": {
+            "type": "object",
+            "description": "Parameters for prediction and post-processing",
+            "properties": {
+                "use_random_walker": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether to apply Random Walker refinement to the initial classifier output."
+                },
+                "random_walker_beta": {
+                    "type": "number",
+                    "default": 130.0,
+                    "description": "Beta parameter for the Random Walker (controls edge sensitivity)."
+                },
+                "inference_proximity_mm": {
+                    "type": "number",
+                    "default": 15.0,
+                    "description": "Proximity (in mm) to detected bone surfaces for cartilage classification."
+                },
+                "perform_evaluation": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "If true, the inference script will attempt to calculate Dice scores against ground truth."
+                }
+            },
+            "additionalProperties": false
+        },
+        "output_config": {
+            "type": "object",
+            "description": "Configuration for saving results",
+            "properties": {
+                "model_directory": {
+                    "type": "string",
+                    "description": "Directory where trained models (.joblib) will be saved or loaded from."
+                },
+                "prediction_directory": {
+                    "type": "string",
+                    "description": "Directory where predicted segmentation volumes will be saved."
+                },
+                "evaluation_report_path": {
+                    "type": "string",
+                    "description": "Path to save the final quantitative evaluation report (JSON)."
+                }
+            },
+            "required": [
+                "model_directory"
+            ],
+            "additionalProperties": false
+        }
+    },
+    "required": [
+        "data_config",
+        "output_config"
+    ],
+    "additionalProperties": false
+}

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kneeseg"
+version = "0.1.0"
+description = "A Python reimplementation of Semantic Context Forests for Knee Cartilage Segmentation"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+  {name = "Quan Wang", email = "quanw@google.com"}
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy",
+    "scipy",
+    "scikit-learn",
+    "joblib",
+    "tqdm",
+    "SimpleITK"
+]
+
+[project.scripts]
+kneeseg-pipeline = "kneeseg.pipeline.run:main"

@@ -1,0 +1,10 @@
+numpy
+scipy
+scikit-learn
+simpleitk
+scikit-image
+joblib
+pycpd
+argparse
+jsonschema
+tqdm

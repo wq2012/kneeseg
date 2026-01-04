@@ -1,0 +1,21 @@
+
+{
+    "data_config": {
+        "image_directory": "/usr/local/google/home/quanw/Code/siemens_2012/Data/SKI10/TrainingData",
+        "label_directory": "/usr/local/google/home/quanw/Code/siemens_2012/Data/SKI10/TrainingData_labels",
+        "split_file": "/usr/local/google/home/quanw/Code/siemens_2012/experiments/ski10_full_split.json"
+    },
+    "inference_config": {
+        "inference_proximity_mm": 10.0,
+        "use_random_walker": true,
+        "random_walker_beta": 130.0,
+        "active_search_iters": 20,
+        "active_search_range": 25
+    },
+    "model_config": {
+        "model_directory": "/usr/local/google/home/quanw/Code/siemens_2012/experiments/ski10_full_models_repro"
+    },
+    "output_config": {
+        "prediction_directory": "/usr/local/google/home/quanw/Code/siemens_2012/experiments/ski10_improved_predictions"
+    }
+}
