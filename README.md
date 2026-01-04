@@ -32,21 +32,94 @@ pip install kneeseg
 ## Usage
 
 ### As a Library
+
+You can use `kneeseg` modules directly in your Python scripts to load data, train models, or run inference.
+
 ```python
-from kneeseg.io import load_volume
+import os
+from kneeseg.io import load_volume, save_volume
 from kneeseg.bone_rf import BoneClassifier
-# ...
+
+# 1. Load Data
+# Data should be .mhd/.raw or .hdr/.img
+image_path = 'data/image-001.mhd'
+image = load_volume(image_path)
+
+# 2. Initialize Model
+# Example: Initialize the first-pass Bone Classifier
+bone_rf = BoneClassifier(n_estimators=100, max_depth=25)
+
+# 3. Predict (assuming pre-trained model loaded or trained)
+# bone_rf.load('models/bone_rf_p1.joblib')
+pred_mask, prob_map = bone_rf.predict(image)
+
+# 4. Save Result
+save_volume(pred_mask, 'output/prediction.mhd', reference_image=image)
 ```
 
-### Running the Pipeline
-The package includes a unified pipeline script `kneeseg-pipeline` (or via python module):
+### Running the Pipeline (CLI)
 
+The package provides a command-line interface `kneeseg-pipeline` to orchestrate the full training and inference workflow using the SKI10 dataset split.
+
+**Prerequisites:**
+- **Data Structure**: The pipeline expects two directories:
+    1.  `.../images`: Contains `.mhd` image files.
+    2.  `.../images_labels`: Contains `.mhd` label files (folder name must be `image_dir` + `_labels`).
+- **File Naming**: Files must match the SKI10 naming convention (e.g., `image-001.mhd`, `labels-001.mhd`) as defined in `kneeseg/data/ski10_full_split.json`.
+
+**Command:**
 ```bash
-# Run using the installed command
-kneeseg-pipeline --data-dir /path/to/SKI10/data
+# Point to your image directory. Expects sibling directory with "_labels" suffix.
+kneeseg-pipeline --data-dir /path/to/SKI10/data/images
 ```
+
+**Workflow:**
+1.  **Training**: Checks if models exist in `experiments/models`. If not, trains using the 60 training cases.
+2.  **Inference**: Checks if `evaluation_report.json` exists in `experiments/predictions`. If not, runs inference on the 20 evaluation cases.
 
 > For advanced usage and reproduction scripts (e.g., training models from scratch), please refer to the [Experiments Documentation](experiments/README.md).
+
+## Configuration
+
+The pipeline relies on a JSON configuration file to define data paths and model parameters. You can create your own config file for custom experiments.
+
+### Structure
+A valid configuration file has three main sections:
+
+1.  **`data_config`**: Paths to your data and split files.
+2.  **`training_config`**: Parameters for Random Forest training (e.g., number of trees).
+3.  **`output_config`**: Directories for saving models and predictions.
+
+### Example Configuration
+
+```json
+{
+    "data_config": {
+        "image_directory": "/path/to/images",
+        "label_directory": "/path/to/labels",
+        "split_file": "/path/to/split.json"
+    },
+    "training_config": {
+        "augmentation": true,
+        "bone_parameters": {
+            "n_estimators": 100,
+            "max_depth": 25,
+            "pca_components": 20
+        },
+        "cartilage_parameters": {
+            "n_estimators": 100,
+            "max_depth": 20,
+            "training_proximity_mm": 15.0
+        }
+    },
+    "output_config": {
+        "model_directory": "/path/to/save/models",
+        "prediction_directory": "/path/to/save/predictions"
+    }
+}
+```
+
+> **Note**: The `split_file` should be a JSON containing `{"train": ["file1.mhd", ...], "eval": ["file2.mhd", ...]}`.
 
 ## Experiments Folder
 The `experiments/` directory contains reproduceable scripts and will store the output models (`models/`) and predictions (`predictions/`) if you run the scripts provided there. See [experiments/README.md](experiments/README.md) for details.

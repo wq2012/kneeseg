@@ -1,9 +1,9 @@
 
 {
     "data_config": {
-        "image_directory": "/usr/local/google/home/quanw/Code/siemens_2012/Data/SKI10/TrainingData",
-        "label_directory": "/usr/local/google/home/quanw/Code/siemens_2012/Data/SKI10/TrainingData_labels",
-        "split_file": "/usr/local/google/home/quanw/Code/siemens_2012/experiments/ski10_full_split.json"
+        "image_directory": "/path/to/SKI10/TrainingData",
+        "label_directory": "/path/to/SKI10/TrainingData_labels",
+        "split_file": "kneeseg/data/ski10_full_split.json"
     },
     "training_config": {
         "augmentation": true,
@@ -19,6 +19,6 @@
         }
     },
     "output_config": {
-        "model_directory": "/usr/local/google/home/quanw/Code/siemens_2012/experiments/ski10_full_models_repro"
+        "model_directory": "./experiments/models"
     }
 }

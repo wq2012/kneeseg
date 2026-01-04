@@ -1,6 +1,0 @@
-{
-    "data_dir": "path/to/data",
-    "model_dir": "models",
-    "n_estimators": 100,
-    "max_depth": 15
-}
