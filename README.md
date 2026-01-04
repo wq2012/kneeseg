@@ -16,10 +16,11 @@
 ## Table of Contents
 1. [Installation](#installation)
 2. [Usage](#usage)
-3. [Experiments Folder](#experiments-folder)
-4. [Experiment Results (SKI10)](#experiment-results-ski10)
-5. [Algorithm Details](#algorithm-details)
-6. [Citation](#citation)
+3. [Configuration](#configuration)
+4. [Experiments Folder](#experiments-folder)
+5. [Experiment Results (SKI10)](#experiment-results-ski10)
+6. [Algorithm Details](#algorithm-details)
+7. [Citation](#citation)
 
 ## Installation
 
