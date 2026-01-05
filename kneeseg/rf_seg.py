@@ -13,17 +13,18 @@ class CartilageClassifier:
             class_weight='balanced'
         )
 
-    def train(self, images, bone_masks, labels, landmarks_list=None, landmark_indices=None):
+    def train(self, images, bone_masks, labels, landmarks_list=None, landmark_indices=None, prob_maps=None):
         """
         Trains the classifier on a set of images and ground truth labels.
         landmarks_list: list of dicts {'femur': (N,3), ...} matched to images
         landmark_indices: dict {'femur': [idx1...], ...} fixed indices
+        prob_maps: list of probability maps from previous pass (Auto-Context)
         """
         X_all = []
         y_all = []
         
         from tqdm import tqdm
-        print("    Extracting features for Random Forest...")
+        print(f"    Extracting features for Random Forest (ProbMap={prob_maps is not None})...")
         for i, (img, b_masks, lbl) in enumerate(tqdm(zip(images, bone_masks, labels), total=len(images), desc="Case progress")):
             dts = compute_signed_distance_transforms(b_masks)
             
@@ -33,8 +34,9 @@ class CartilageClassifier:
             
             # Extract landmarks for this case if available
             lms = landmarks_list[i] if landmarks_list else None
+            pm = prob_maps[i] if prob_maps else None
             
-            X = extract_features(img, dts, mask=mask, landmarks_dict=lms, landmark_indices=landmark_indices)
+            X = extract_features(img, dts, mask=mask, landmarks_dict=lms, landmark_indices=landmark_indices, prob_map=pm)
             y = lbl.flatten()[mask]
             
             # Additional random subsampling to speed up training

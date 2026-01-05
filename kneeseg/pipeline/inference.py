@@ -61,13 +61,29 @@ def inference_improved(config=None):
         print("Error: Bone RF models not found.")
         return
 
-    cart_rf = None
+    cart_rf_p1 = None
+    cart_rf_p2 = None
     try:
-        cart_rf = CartilageClassifier()
-        cart_rf.load(os.path.join(model_dir, 'cartilage_rf.joblib'))
+        cart_rf_p1 = CartilageClassifier()
+        # Try finding p1 or fallback to old name
+        p1_path = os.path.join(model_dir, 'cartilage_rf_p1.joblib')
+        if not os.path.exists(p1_path):
+             p1_path = os.path.join(model_dir, 'cartilage_rf.joblib')
+        
+        cart_rf_p1.load(p1_path)
+        
+        # Load P2
+        p2_path = os.path.join(model_dir, 'cartilage_rf_p2.joblib')
+        if os.path.exists(p2_path):
+            cart_rf_p2 = CartilageClassifier()
+            cart_rf_p2.load(p2_path)
+        else:
+            print("Warning: Cartilage RF P2 model not found.")
+            
     except FileNotFoundError:
-        print("Warning: Cartilage RF model not found. Skipping cartilage prediction.")
-        cart_rf = None
+        print("Warning: Cartilage RF models not found. Skipping cartilage prediction.")
+        cart_rf_p1 = None
+        cart_rf_p2 = None
 
     scores = {}
     
@@ -96,9 +112,17 @@ def inference_improved(config=None):
         }
         
         cart_pred = np.zeros_like(img, dtype=np.uint8)
-        if cart_rf is not None:
+        if cart_rf_p1 is not None and cart_rf_p2 is not None:
              # 2. Predict Cartilage
-             cart_pred, _ = cart_rf.predict(img, bone_masks, proximity_mm=20.0)
+             # Pass 1: Prob Map
+             c_prob1 = cart_rf_p1.predict_proba_map(img, bone_masks, proximity_mm=20.0)
+             
+             # Pass 2: Final Prediction (Auto-Context)
+             cart_pred, _ = cart_rf_p2.predict(img, bone_masks, proximity_mm=20.0, prob_map=c_prob1)
+        elif cart_rf_p1 is not None:
+             # Fallback to single pass if p2 missing (compatibility)
+             print("Warning: Only P1 model found. Running single pass.")
+             cart_pred, _ = cart_rf_p1.predict(img, bone_masks, proximity_mm=20.0)
         
         # 3. Evaluate
         if lbl is not None:
@@ -141,7 +165,7 @@ def inference_improved(config=None):
         # Add Cartilage (Overwrite bones at boundary? or priority?)
         # Usually cartilage classifier is more specific near boundaries?
         # Or just trust cartilage classifier if it predicts cartilage?
-        if cart_rf is not None:
+        if cart_rf_p1 is not None:
             # Cartilage labels: 2 (FemCart), 4 (TibCart)
             final_seg[cart_pred == 2] = 2
             final_seg[cart_pred == 4] = 4

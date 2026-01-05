@@ -14,8 +14,8 @@
 | **Bone Segmentation** | Active Shape Model (Siemens proprietary) | Dense Auto-Context Random Forest (Python) |
 | **Cartilage Segmentation** | [Semantic Context Forest (C++)](https://github.com/wq2012/DecisionForest) | Semantic Context Forest (Python) |
 | **Dataset** |  Osteoarthritis Initiative (OAI) | [SKI10](https://ski10.grand-challenge.org/) |
-| **Bone DSC** | ~95% | ~91% |
-| **Cartilage DSC** | ~83% | ~59% |
+| **Bone DSC** | ~95% | >91% |
+| **Cartilage DSC** | ~83% | ~69% |
 
 ## Table of Contents
 1. [Installation](#installation)
@@ -86,12 +86,14 @@ from kneeseg.rf_seg import CartilageClassifier
 # (Parameters must match training, or just use defaults if standard)
 bone_p1 = BoneClassifier()
 bone_p2 = BoneClassifier()
-cartilage_rf = CartilageClassifier()
+cart_p1 = CartilageClassifier()
+cart_p2 = CartilageClassifier()
 
 # 2. Load the weights
 bone_p1.load("path/to/bone_rf_p1.joblib")
 bone_p2.load("path/to/bone_rf_p2.joblib")
-cartilage_rf.load("path/to/cartilage_rf.joblib")
+cart_p1.load("path/to/cartilage_rf_p1.joblib")
+cart_p2.load("path/to/cartilage_rf_p2.joblib")
 
 # 3. Predict (Example: Bone Pass 1)
 pred_p1, prob_p1 = bone_p1.predict(image)
@@ -168,12 +170,12 @@ The `experiments/` directory contains reproduceable scripts and will store the o
 Since the [SKI10 dataset](https://ski10.grand-challenge.org/) doesn not provide the ground truth labels for its default testing set, we evaluated the pipeline on a **20% hold-out set** (20 cases) from the SKI10 training data (Total 100 cases: 80 Train, 20 Eval).
 
 ### Metrics
-| Structure | Dice Similarity Coefficient (DSC) |
+| structure | Dice Similarity Coefficient (DSC) |
 |-----------|-----------------------------------|
-| **Femur** | 0.9046 ± 0.0361 |
-| **Tibia** | 0.9292 ± 0.0260 |
-| **Femoral Cartilage** | 0.5944 ± 0.0654 |
-| **Tibial Cartilage** | 0.5805 ± 0.0533 |
+| **Femur** | 0.9155 ± 0.0303 |
+| **Tibia** | 0.9383 ± 0.0194 |
+| **Femoral Cartilage** | 0.7095 ± 0.0478 |
+| **Tibial Cartilage** | 0.6799 ± 0.0429 |
 
 ### Evaluation Set
 The following 20 cases were held out for evaluation:
@@ -191,13 +193,12 @@ The following 20 cases were held out for evaluation:
     - **Performance**: Achieves >0.90 DSC on Bones.
 
 ### Cartilage Segmentation (Semantic Context Forest)
-1.  **Feature Extraction**:
-    - **Semantic Context**: Signed Distance Transforms (SDT) computed from Pass 2 bone masks.
-    - **Texture**: RSID (30 offsets).
-    - **Local**: Intensity, Gaussian ($\sigma=1.0$), Gradient.
-    - **Arithmetic**: DT Sum/Diff.
-2.  **Classification**: Dense Random Forest (100 trees).
-    - **Performance**: Achieves ~0.60 DSC.
+1.  **Pass 1**: Initial Semantic Context Forest.
+    - **Features**: Signed Distance Transforms (SDT) from Bones, RSID, Texture, Gaussian.
+    - **Performance**: ~0.60 DSC.
+2.  **Pass 2 (Refinement)**: Auto-Context Random Forest.
+    - **Features**: All Pass 1 features + **Probabilities from Cartilage Pass 1**.
+    - **Performance**: Achieves ~0.70 DSC (Femoral) and ~0.68 DSC (Tibial).
 
 ## Citation
 
