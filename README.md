@@ -170,12 +170,12 @@ The `experiments/` directory contains reproduceable scripts and will store the o
 Since the [SKI10 dataset](https://ski10.grand-challenge.org/) doesn not provide the ground truth labels for its default testing set, we evaluated the pipeline on a **20% hold-out set** (20 cases) from the SKI10 training data (Total 100 cases: 80 Train, 20 Eval).
 
 ### Metrics
-| structure | Dice Similarity Coefficient (DSC) |
+| Structure | Dice Similarity Coefficient (DSC) |
 |-----------|-----------------------------------|
-| **Femur** | 0.9155 ± 0.0303 |
-| **Tibia** | 0.9383 ± 0.0194 |
-| **Femoral Cartilage** | 0.7095 ± 0.0478 |
-| **Tibial Cartilage** | 0.6799 ± 0.0429 |
+| **Femur** | 0.9046 ± 0.0361 |
+| **Tibia** | 0.9292 ± 0.0260 |
+| **Femoral Cartilage** | 0.6767 ± 0.0481 |
+| **Tibial Cartilage** | 0.6411 ± 0.0540 |
 
 ### Evaluation Set
 The following 20 cases were held out for evaluation:
