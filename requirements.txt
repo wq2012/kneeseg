@@ -8,3 +8,4 @@ pycpd
 argparse
 jsonschema
 tqdm
+ml_dtypes

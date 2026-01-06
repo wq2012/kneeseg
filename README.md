@@ -202,7 +202,8 @@ A valid configuration file has three main sections:
     },
     "model_config": {
         "target_bones": ["femur", "tibia", "patella"],
-        "model_directory": "/path/to/save/models"
+        "model_directory": "/path/to/save/models",
+        "dtype": "bfloat16"
     },
     "output_config": {
         "prediction_directory": "/path/to/save/predictions"
@@ -215,6 +216,9 @@ A valid configuration file has three main sections:
     -   Default for SKI10: `["femur", "tibia"]`
     -   Default for OAI: `["femur", "tibia", "patella"]`
     -   *Cartilage is closely coupled: "femur" includes "femoral cartilage".*
+-   **`dtype`**: (Optional) Data type for feature extraction matrices.
+    -   Options: `"float32"` (default), `"bfloat16"`.
+    -   **Recommedation**: Use `"bfloat16"` to reduce memory usage by ~50%. Requires `ml_dtypes`.
 
 > **Note**: The `split_file` should be a JSON containing `{"train": ["file1.mhd", ...], "eval": ["file2.mhd", ...]}`.
 

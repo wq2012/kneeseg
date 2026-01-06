@@ -30,6 +30,9 @@ def inference_improved(config=None):
     target_bones = model_cfg.get('target_bones', ['femur', 'tibia'])
     out_cfg = config['output_config']
     
+    target_dtype = model_cfg.get('dtype', 'float32')
+    print(f"Target Bones: {target_bones}, dtype: {target_dtype}")
+    
     image_dir = data_cfg['image_directory']
     label_dir = data_cfg.get('label_directory') # Optional
     split_file = data_cfg.get('split_file') # Optional
@@ -110,10 +113,10 @@ def inference_improved(config=None):
         img, spacing = load_volume(img_path, return_spacing=True)
         
         # 1. Predict Bones (Pass 1)
-        _, prob1 = bone_rf_p1.predict(img)
+        _, prob1 = bone_rf_p1.predict(img, dtype=target_dtype)
         
         # 2. Predict Bones (Pass 2 - Auto-Context)
-        bone_pred_flat, _ = bone_rf_p2.predict(img, prob_map=prob1)
+        bone_pred_flat, _ = bone_rf_p2.predict(img, prob_map=prob1, dtype=target_dtype)
         bone_pred = bone_pred_flat.reshape(img.shape)
         
         bone_masks = {}
@@ -127,14 +130,14 @@ def inference_improved(config=None):
         if cart_rf_p1 is not None and cart_rf_p2 is not None:
              # 2. Predict Cartilage
              # Pass 1: Prob Map
-             c_prob1 = cart_rf_p1.predict_proba_map(img, bone_masks, proximity_mm=20.0)
+             c_prob1 = cart_rf_p1.predict_proba_map(img, bone_masks, proximity_mm=20.0, dtype=target_dtype)
              
              # Pass 2: Final Prediction (Auto-Context)
-             cart_pred, _ = cart_rf_p2.predict(img, bone_masks, proximity_mm=20.0, prob_map=c_prob1)
+             cart_pred, _ = cart_rf_p2.predict(img, bone_masks, proximity_mm=20.0, prob_map=c_prob1, dtype=target_dtype)
         elif cart_rf_p1 is not None:
              # Fallback to single pass if p2 missing (compatibility)
              print("Warning: Only P1 model found. Running single pass.")
-             cart_pred, _ = cart_rf_p1.predict(img, bone_masks, proximity_mm=20.0)
+             cart_pred, _ = cart_rf_p1.predict(img, bone_masks, proximity_mm=20.0, dtype=target_dtype)
         
         # 3. Evaluate
         if lbl is not None:

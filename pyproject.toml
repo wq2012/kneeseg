@@ -22,7 +22,8 @@ dependencies = [
     "scikit-learn",
     "joblib",
     "tqdm",
-    "SimpleITK"
+    "SimpleITK",
+    "ml_dtypes"
 ]
 
 [project.scripts]

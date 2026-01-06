@@ -19,7 +19,8 @@ def train_improved(config):
     
     target_bones = model_cfg.get('target_bones', ['femur', 'tibia']) # Default to SKI10 legacy
     n_jobs = model_cfg.get('n_jobs', -1) # Default to all cores if not specified
-    print(f"Target Bones: {target_bones}, n_jobs: {n_jobs}")
+    target_dtype = model_cfg.get('dtype', 'float32')
+    print(f"Target Bones: {target_bones}, n_jobs: {n_jobs}, dtype: {target_dtype}")
 
     image_dir = data_cfg['image_directory']
     label_dir = data_cfg['label_directory']
@@ -59,7 +60,7 @@ def train_improved(config):
     
     print(f"    Params: n_estimators={bp_n_estimators}, max_depth={bp_max_depth}, n_jobs={bp_n_jobs}")
     bone_rf_p1 = BoneClassifier(n_estimators=bp_n_estimators, max_depth=bp_max_depth, n_jobs=bp_n_jobs)
-    bone_rf_p1.train(images, labels)
+    bone_rf_p1.train(images, labels, dtype=target_dtype)
     bone_rf_p1.save(os.path.join(model_dir, 'bone_rf_p1.joblib'))
     
     # Generate Prob Maps
@@ -67,13 +68,13 @@ def train_improved(config):
     prob_maps = []
     
     for img in tqdm(images):
-        _, prob = bone_rf_p1.predict(img)
+        _, prob = bone_rf_p1.predict(img, dtype=target_dtype)
         prob_maps.append(prob)
         
     # --- STAGE 2: BONE SEGMENTATION (Pass 2 - Auto-Context) ---
     print("\n--- Training Bone RF (Pass 2 - Auto-Context) ---")
     bone_rf_p2 = BoneClassifier(n_estimators=bp_n_estimators, max_depth=bp_max_depth, n_jobs=bp_n_jobs)
-    bone_rf_p2.train(images, labels, prob_maps=prob_maps)
+    bone_rf_p2.train(images, labels, prob_maps=prob_maps, dtype=target_dtype)
     bone_rf_p2.save(os.path.join(model_dir, 'bone_rf_p2.joblib'))
     
     # Generate Final Bone Masks for Cartilage Training
@@ -82,7 +83,7 @@ def train_improved(config):
     
     for img, pm in tqdm(zip(images, prob_maps)):
         # Pass 2 predict
-        _, prob2 = bone_rf_p2.predict(img, prob_map=pm)
+        _, prob2 = bone_rf_p2.predict(img, prob_map=pm, dtype=target_dtype)
         pred = np.argmax(prob2, axis=-1)
         
         mask_dict = {}
@@ -111,7 +112,7 @@ def train_improved(config):
     print(f"    Params: n_estimators={cp_n_estimators}, max_depth={cp_max_depth}, n_jobs={cp_n_jobs}, prox={cp_prox}")
     
     cart_rf_p1 = CartilageClassifier(n_estimators=cp_n_estimators, max_depth=cp_max_depth, target_bones=target_bones, n_jobs=cp_n_jobs)
-    cart_rf_p1.train(images, bone_masks, labels, landmarks_list=None) # No ASM landmarks used
+    cart_rf_p1.train(images, bone_masks, labels, landmarks_list=None, dtype=target_dtype) # No ASM landmarks used
     cart_rf_p1.save(os.path.join(model_dir, 'cartilage_rf_p1.joblib'))
     
     # Generate Prob Maps (P1)
@@ -119,13 +120,13 @@ def train_improved(config):
     cart_prob_maps = []
     
     for img, b_mask in tqdm(zip(images, bone_masks)):
-        pm = cart_rf_p1.predict_proba_map(img, b_mask, proximity_mm=cp_prox)
+        pm = cart_rf_p1.predict_proba_map(img, b_mask, proximity_mm=cp_prox, dtype=target_dtype)
         cart_prob_maps.append(pm)
         
     # --- STAGE 4: CARTILAGE SEGMENTATION (Pass 2 - Auto-Context) ---
     print("\n--- Training Cartilage RF (Pass 2 - Auto-Context) ---")
     cart_rf_p2 = CartilageClassifier(n_estimators=cp_n_estimators, max_depth=cp_max_depth, target_bones=target_bones, n_jobs=cp_n_jobs)
-    cart_rf_p2.train(images, bone_masks, labels, prob_maps=cart_prob_maps)
+    cart_rf_p2.train(images, bone_masks, labels, prob_maps=cart_prob_maps, dtype=target_dtype)
     cart_rf_p2.save(os.path.join(model_dir, 'cartilage_rf_p2.joblib'))
     
     print("Training Complete.")

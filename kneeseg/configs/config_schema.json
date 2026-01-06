@@ -142,6 +142,15 @@
                     "type": "string",
                     "description": "Optional override for model directory."
                 },
+                "dtype": {
+                    "type": "string",
+                    "enum": [
+                        "float32",
+                        "bfloat16"
+                    ],
+                    "default": "float32",
+                    "description": "Data type for feature extraction and training. Use 'bfloat16' to reduce memory usage."
+                },
                 "n_jobs": {
                     "type": "integer",
                     "default": -1,

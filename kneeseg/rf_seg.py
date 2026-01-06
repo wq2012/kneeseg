@@ -14,7 +14,7 @@ class CartilageClassifier:
         )
         self.target_bones = target_bones
 
-    def train(self, images, bone_masks, labels, landmarks_list=None, landmark_indices=None, prob_maps=None):
+    def train(self, images, bone_masks, labels, landmarks_list=None, landmark_indices=None, prob_maps=None, dtype='float32'):
         """
         Trains the classifier on a set of images and ground truth labels.
         landmarks_list: list of dicts {'femur': (N,3), ...} matched to images
@@ -37,7 +37,7 @@ class CartilageClassifier:
             lms = landmarks_list[i] if landmarks_list else None
             pm = prob_maps[i] if prob_maps else None
             
-            X = extract_features(img, dts, mask=mask, landmarks_dict=lms, landmark_indices=landmark_indices, prob_map=pm, sorted_bones_override=self.target_bones)
+            X = extract_features(img, dts, mask=mask, landmarks_dict=lms, landmark_indices=landmark_indices, prob_map=pm, sorted_bones_override=self.target_bones, target_dtype=dtype)
             y = lbl.flatten()[mask]
             
             # Additional random subsampling to speed up training
@@ -57,7 +57,7 @@ class CartilageClassifier:
         print("    Fitting Random Forest (this may take a while)...")
         self.clf.fit(np.vstack(X_all), np.concatenate(y_all))
 
-    def predict(self, image, bone_masks, proximity_mm=80.0, landmarks_dict=None, landmark_indices=None, prob_map=None):
+    def predict(self, image, bone_masks, proximity_mm=80.0, landmarks_dict=None, landmark_indices=None, prob_map=None, dtype='float32'):
         """
         Predicts cartilage labels for a single image.
         prob_map: (Z,Y,X,C) feature from previous pass (Auto-Context).
@@ -69,7 +69,7 @@ class CartilageClassifier:
         mask = min_dt.flatten() < proximity_mm # Use configurable proximity
         
         X = extract_features(image, dts, mask=mask, landmarks_dict=landmarks_dict, 
-                             landmark_indices=landmark_indices, prob_map=prob_map, sorted_bones_override=self.target_bones)
+                             landmark_indices=landmark_indices, prob_map=prob_map, sorted_bones_override=self.target_bones, target_dtype=dtype)
         
         # Initial prediction (only for masked voxels)
         y_pred_masked = self.clf.predict(X)
@@ -86,7 +86,7 @@ class CartilageClassifier:
         
         return y_pred.reshape(image.shape), y_prob
 
-    def predict_proba_map(self, image, bone_masks, proximity_mm=80.0, landmarks_dict=None, landmark_indices=None):
+    def predict_proba_map(self, image, bone_masks, proximity_mm=80.0, landmarks_dict=None, landmark_indices=None, dtype='float32'):
         """
         Predicts dense probability map for Auto-Context.
         Returns: (Z, Y, X, C) probability array.
@@ -95,7 +95,7 @@ class CartilageClassifier:
         min_dt = np.min([np.abs(d) for d in dts.values()], axis=0)
         mask = min_dt.flatten() < proximity_mm
         
-        X = extract_features(image, dts, mask=mask, landmarks_dict=landmarks_dict, landmark_indices=landmark_indices, sorted_bones_override=self.target_bones) # Pass 1 has no prob_map
+        X = extract_features(image, dts, mask=mask, landmarks_dict=landmarks_dict, landmark_indices=landmark_indices, sorted_bones_override=self.target_bones, target_dtype=dtype) # Pass 1 has no prob_map
         
         y_prob_masked = self.clf.predict_proba(X)
         
