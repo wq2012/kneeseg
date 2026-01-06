@@ -10,27 +10,31 @@ This directory contains standalone scripts to reproduce the experiments using th
 - `predictions/`: Prediction outputs (Ignored in git).
 
 ## Usage
-These scripts are designed to be run from the repository root:
+These scripts are wrappers around the `kneeseg` library. You should run them with a configuration file:
 
 ```bash
-export PYTHONPATH=$PYTHONPATH:.
-python3 delivery/experiments/run_pipeline.py
+# Training
+python3 delivery/experiments/train.py path/to/your_config.json
+
+# Inference
+python3 delivery/experiments/inference.py path/to/your_config.json
 ```
 
 ## Model Checkpoints (`models/`)
-The training pipeline generates three serialized Random Forest models using `joblib`:
+The training pipeline generates serialized Random Forest models:
 
 1.  **`bone_rf_p1.joblib`** (Bone Pass 1):
     - **Input**: Image intensity & spatial features.
-    - **Output**: Initial probability maps for Femur and Tibia.
-    - **Role**: Provides the "Auto-Context" context for the second pass.
+    - **Output**: Initial probability maps for Bones.
 
 2.  **`bone_rf_p2.joblib`** (Bone Pass 2):
     - **Input**: Original features + Probability maps from Pass 1.
-    - **Output**: Refined, final bone masks.
-    - **Role**: Solves the bone segmentation task with high accuracy (>0.90 DSC).
+    - **Output**: Refined bone masks.
 
-3.  **`cartilage_rf.joblib`** (Cartilage):
-    - **Input**: Image features + Signed Distance Transforms (from Pass 2 Bone Masks).
-    - **Output**: Cartilage class predictions (Femoral/Tibial).
-    - **Role**: Segments cartilage within the bone proximity.
+3.  **`cartilage_rf_p1.joblib`** (Cartilage Pass 1):
+    - **Input**: Image features + Signed Distance Transforms (from Bone Masks).
+    - **Output**: Initial cartilage predictions.
+
+4.  **`cartilage_rf_p2.joblib`** (Cartilage Pass 2):
+    - **Input**: Features + Probability maps from Cartilage Pass 1.
+    - **Output**: Final cartilage segmentation.

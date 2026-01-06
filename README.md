@@ -21,21 +21,22 @@
 ## Table of Contents
 1. [Installation](#installation)
 2. [Dataset Support](#dataset-support)
-3. [Usage](#usage)
+3. [Pretrained Models](#pretrained-models)
+4. [Usage](#usage)
     - [As a Library](#as-a-library)
     - [Loading Pretrained Models](#loading-pretrained-models)
     - [Running the Pipeline (CLI)](#running-the-pipeline-cli)
-4. [Configuration](#configuration)
+5. [Configuration](#configuration)
     - [Structure](#structure)
     - [Example Configuration](#example-configuration)
-5. [Experiments Folder](#experiments-folder)
-6. [Experiment Results (SKI10)](#experiment-results-ski10)
-    - [Metrics](#metrics)
-    - [Evaluation Set](#evaluation-set)
+6. [Experiments](#experiments)
+    - [Experiments Folder](#experiments-folder)
+    - [SKI10 Experiment Results](#ski10-experiment-results)
+    - [Downsampled OAI Experiment Results](#downsampled-oai-experiment-results)
 7. [Algorithm Details](#algorithm-details)
     - [Bone Segmentation (Dense Auto-Context RF)](#bone-segmentation-dense-auto-context-rf)
     - [Cartilage Segmentation (Semantic Context Forest)](#cartilage-segmentation-semantic-context-forest)
-8. [Citation](#citation)
+9. [Citation](#citation)
 
 ## Installation
 
@@ -73,6 +74,23 @@ The Osteoarthritis Initiative dataset, refactored to extend the SKI10 schema.
 
 > **Note**: The pipeline adapts its behavior (number of classes, target structures) based on the `target_bones` configuration.
 
+
+## Pretrained Models
+
+We provide pretrained models for both SKI10 and downsampled OAI datasets on huggingface.
+
+### SKI10
+
+Models are trained on all 100 SKI10 training images, supporting segmentation of femur, tibia, femoral cartilage, and tibial cartilage:
+
+* [wq2012/knee_3d_mri_segmentation_SKI10](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10)
+
+### Downsampled OAI
+
+Models are trained on 128 OAI training images, supporting segmentation of femur, tibia, patella, femoral cartilage, tibial cartilage, and patellar cartilage:
+
+* [wq2012/knee_3d_mri_segmentation_OAI_downsampled](https://huggingface.co/wq2012/knee_3d_mri_segmentation_OAI_downsampled)
+
 ## Usage
 
 ### As a Library
@@ -102,9 +120,6 @@ save_volume(pred_mask, 'output/prediction.mhd', metadata={'spacing': spacing})
 ```
 
 ### Loading Pretrained Models
-
-Pretrained models (trained on all 100 SKI10 training cases) are available on Hugging Face:
-- **Hugging Face Hub**: [https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10)
 
 To use models you have trained or downloaded (e.g., from the Hugging Face release), simply use the `load()` method:
 
@@ -203,13 +218,17 @@ A valid configuration file has three main sections:
 
 > **Note**: The `split_file` should be a JSON containing `{"train": ["file1.mhd", ...], "eval": ["file2.mhd", ...]}`.
 
-## Experiments Folder
-The `experiments/` directory contains reproduceable scripts and will store the output models (`models/`) and predictions (`predictions/`) if you run the scripts provided there. See [experiments/README.md](experiments/README.md) for details.
+## Experiments
 
-## Experiment Results (SKI10)
+### Experiments Folder
+The `experiments/` directory contains reproduceable scripts for the SKI10 expeirments, and will store the output models (`models/`) and predictions (`predictions/`) if you run the scripts provided there. See [experiments/README.md](experiments/README.md) for details.
+
+### SKI10 Experiment Results
+
+#### Data Split
 Since the [SKI10 dataset](https://ski10.grand-challenge.org/) doesn not provide the ground truth labels for its default testing set, we evaluated the pipeline on a **20% hold-out set** (20 cases) from the SKI10 training data (Total 100 cases: 80 Train, 20 Eval).
 
-### Metrics
+#### Metrics
 | Structure | Dice Similarity Coefficient (DSC) |
 |-----------|-----------------------------------|
 | **Femur** | 0.9046 ± 0.0361 |
@@ -217,9 +236,27 @@ Since the [SKI10 dataset](https://ski10.grand-challenge.org/) doesn not provide 
 | **Femoral Cartilage** | 0.6767 ± 0.0481 |
 | **Tibial Cartilage** | 0.6411 ± 0.0540 |
 
-### Evaluation Set
+#### Evaluation Set
 The following 20 cases were held out for evaluation:
 `image-004`, `image-005`, `image-012`, `image-014`, `image-015`, `image-018`, `image-028`, `image-029`, `image-030`, `image-032`, `image-036`, `image-055`, `image-065`, `image-070`, `image-076`, `image-082`, `image-087`, `image-089`, `image-095`, `image-098`.
+
+### Downsampled OAI Experiment Results
+
+#### Data Split
+
+After downsampling and filtering, we performed a 80%-20% split,
+using 128 images for training, and 31 images for evaluation. 
+
+#### Metrics
+
+| Structure | Dice Similarity Coefficient (DSC) |
+| --- | --- |
+| **Femur** | 0.7130 ± 0.0673 |
+| **Tibia** | 0.7545 ± 0.0598 |
+| **Patella** | 0.5209 ± 0.0831 |
+| **Femoral Cartilage** | 0.5171 ± 0.0716 |
+| **Tibial Cartilage** | 0.4134 ± 0.0888 |
+| **Patellar Cartilage** | 0.3633 ± 0.1406 |
 
 ## Algorithm Details
 
