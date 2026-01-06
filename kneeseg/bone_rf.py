@@ -4,6 +4,7 @@ import numpy as np
 import joblib
 from .features import extract_features, compute_rsid_features
 from scipy.ndimage import gaussian_filter
+from tqdm import tqdm
 
 class BoneClassifier:
     def __init__(self, n_estimators=100, max_depth=25, n_jobs=-1):
@@ -55,7 +56,7 @@ class BoneClassifier:
                 
         return np.stack(features, axis=1)
 
-    def train(self, images, labels, prob_maps=None, subsample=100000):
+    def train(self, images, labels, prob_maps=None, subsample=50000):
         """
         images: list of 3D arrays
         labels: list of 3D arrays (0=bg, 1=Femur, 2=FemCart, 3=Tibia, 4=TibCart)
@@ -65,17 +66,20 @@ class BoneClassifier:
         y_all = []
         
         print(f"    Extracting features for Bone RF (ProbMap={prob_maps is not None})...")
-        for i, (img, lbl) in enumerate(zip(images, labels)):
+        for i, (img, lbl) in enumerate(tqdm(zip(images, labels), total=len(images))):
             # Map Labels
             # Femur(1) + FemCart(2) -> Femur (1)
             # Tibia(3) + TibCart(4) -> Tibia (2)
+            # Patella(5) + PatCart(6) -> Patella (3)
             # Background -> 0
             
             y_mapped = np.zeros_like(lbl, dtype=np.uint8)
             y_mapped[lbl == 1] = 1 # Femur
-            y_mapped[lbl == 2] = 1 # FemCart -> Femur (Segment the whole joint head)
+            y_mapped[lbl == 2] = 1 # FemCart -> Femur
             y_mapped[lbl == 3] = 2 # Tibia
             y_mapped[lbl == 4] = 2 # TibCart -> Tibia
+            y_mapped[lbl == 5] = 3 # Patella
+            y_mapped[lbl == 6] = 3 # PatCart -> Patella
             
             # Subsample
             # We need balanced sampling.

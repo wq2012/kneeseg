@@ -17,23 +17,25 @@
 | **Bone DSC** | ~95% | ~92% |
 | **Cartilage DSC** | ~83% | ~66% |
 
+
 ## Table of Contents
 1. [Installation](#installation)
-2. [Usage](#usage)
+2. [Dataset Support](#dataset-support)
+3. [Usage](#usage)
     - [As a Library](#as-a-library)
     - [Loading Pretrained Models](#loading-pretrained-models)
     - [Running the Pipeline (CLI)](#running-the-pipeline-cli)
-3. [Configuration](#configuration)
+4. [Configuration](#configuration)
     - [Structure](#structure)
     - [Example Configuration](#example-configuration)
-4. [Experiments Folder](#experiments-folder)
-5. [Experiment Results (SKI10)](#experiment-results-ski10)
+5. [Experiments Folder](#experiments-folder)
+6. [Experiment Results (SKI10)](#experiment-results-ski10)
     - [Metrics](#metrics)
     - [Evaluation Set](#evaluation-set)
-6. [Algorithm Details](#algorithm-details)
+7. [Algorithm Details](#algorithm-details)
     - [Bone Segmentation (Dense Auto-Context RF)](#bone-segmentation-dense-auto-context-rf)
     - [Cartilage Segmentation (Semantic Context Forest)](#cartilage-segmentation-semantic-context-forest)
-7. [Citation](#citation)
+8. [Citation](#citation)
 
 ## Installation
 
@@ -42,6 +44,34 @@ You can install the package via pip:
 ```bash
 pip install kneeseg
 ```
+
+## Dataset Support
+
+This package supports two major dataset structures for knee segmentation:
+
+### 1. SKI10 (Original)
+The standard dataset used for the MICCAI 2010 challenge.
+-   **Target structures**: Femur, Tibia, Femoral Cartilage, Tibial Cartilage.
+-   **Label Mapping**:
+    -   `0`: Background
+    -   `1`: Femur
+    -   `2`: Femoral Cartilage
+    -   `3`: Tibia
+    -   `4`: Tibial Cartilage
+
+### 2. OAI (Refactored)
+The Osteoarthritis Initiative dataset, refactored to extend the SKI10 schema.
+-   **Target structures**: Adds Patella and Patellar Cartilage.
+-   **Label Mapping**:
+    -   `0`: Background
+    -   `1`: Femur
+    -   `2`: Femoral Cartilage
+    -   `3`: Tibia
+    -   `4`: Tibial Cartilage
+    -   `5`: Patella
+    -   `6`: Patellar Cartilage
+
+> **Note**: The pipeline adapts its behavior (number of classes, target structures) based on the `target_bones` configuration.
 
 ## Usage
 
@@ -130,7 +160,8 @@ A valid configuration file has three main sections:
 
 1.  **`data_config`**: Paths to your data and split files.
 2.  **`training_config`**: Parameters for Random Forest training (e.g., number of trees).
-3.  **`output_config`**: Directories for saving models and predictions.
+3.  **`model_config`**: Configuration for model architecture (target bones) and storage directory.
+4.  **`output_config`**: Directory for saving predictions.
 
 ### Example Configuration
 
@@ -146,7 +177,7 @@ A valid configuration file has three main sections:
         "bone_parameters": {
             "n_estimators": 100,
             "max_depth": 25,
-            "pca_components": 20
+            "n_jobs": -1
         },
         "cartilage_parameters": {
             "n_estimators": 100,
@@ -154,12 +185,21 @@ A valid configuration file has three main sections:
             "training_proximity_mm": 15.0
         }
     },
+    "model_config": {
+        "target_bones": ["femur", "tibia", "patella"],
+        "model_directory": "/path/to/save/models"
+    },
     "output_config": {
-        "model_directory": "/path/to/save/models",
         "prediction_directory": "/path/to/save/predictions"
     }
 }
 ```
+
+### Configuration Keys
+-   **`target_bones`**: List of bones to segment.
+    -   Default for SKI10: `["femur", "tibia"]`
+    -   Default for OAI: `["femur", "tibia", "patella"]`
+    -   *Cartilage is closely coupled: "femur" includes "femoral cartilage".*
 
 > **Note**: The `split_file` should be a JSON containing `{"train": ["file1.mhd", ...], "eval": ["file2.mhd", ...]}`.
 

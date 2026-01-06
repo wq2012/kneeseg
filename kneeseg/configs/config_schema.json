@@ -44,15 +44,20 @@
                 "bone_parameters": {
                     "type": "object",
                     "properties": {
-                        "pca_components": {
+                        "n_estimators": {
                             "type": "integer",
-                            "minimum": 1,
-                            "description": "Number of principal components for the Active Shape Model."
+                            "default": 100,
+                            "description": "Number of trees in the Random Forest classifier."
                         },
-                        "subsample_points": {
+                        "max_depth": {
                             "type": "integer",
-                            "default": 1000,
-                            "description": "Number of surface points to sample per case for PCA training."
+                            "default": 25,
+                            "description": "Maximum depth of the Random Forest trees."
+                        },
+                        "n_jobs": {
+                            "type": "integer",
+                            "default": -1,
+                            "description": "Number of jobs to run in parallel. -1 means using all processors."
                         }
                     },
                     "additionalProperties": false
@@ -67,13 +72,18 @@
                         },
                         "max_depth": {
                             "type": "integer",
-                            "default": 15,
+                            "default": 20,
                             "description": "Maximum depth of the Random Forest trees."
+                        },
+                        "n_jobs": {
+                            "type": "integer",
+                            "default": -1,
+                            "description": "Number of jobs to run in parallel."
                         },
                         "subsample_voxels_per_case": {
                             "type": "integer",
                             "default": 50000,
-                            "description": "Max number of voxels to sample per training case to balance speed and memory."
+                            "description": "Max number of voxels to sample per training case."
                         },
                         "training_proximity_mm": {
                             "type": "number",
@@ -113,14 +123,37 @@
             },
             "additionalProperties": false
         },
+        "model_config": {
+            "type": "object",
+            "description": "Configuration for model architecture and targets",
+            "properties": {
+                "target_bones": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        "femur",
+                        "tibia"
+                    ],
+                    "description": "List of bones to segment."
+                },
+                "model_directory": {
+                    "type": "string",
+                    "description": "Optional override for model directory."
+                },
+                "n_jobs": {
+                    "type": "integer",
+                    "default": -1,
+                    "description": "Global n_jobs setting."
+                }
+            },
+            "additionalProperties": false
+        },
         "output_config": {
             "type": "object",
             "description": "Configuration for saving results",
             "properties": {
-                "model_directory": {
-                    "type": "string",
-                    "description": "Directory where trained models (.joblib) will be saved or loaded from."
-                },
                 "prediction_directory": {
                     "type": "string",
                     "description": "Directory where predicted segmentation volumes will be saved."
@@ -130,9 +163,6 @@
                     "description": "Path to save the final quantitative evaluation report (JSON)."
                 }
             },
-            "required": [
-                "model_directory"
-            ],
             "additionalProperties": false
         }
     },

@@ -8,8 +8,9 @@
     "training_config": {
         "augmentation": true,
         "bone_parameters": {
-            "pca_components": 20,
-            "subsample_points": 2000
+            "n_estimators": 100,
+            "max_depth": 25,
+            "n_jobs": -1
         },
         "cartilage_parameters": {
             "n_estimators": 100,
@@ -18,7 +19,13 @@
             "training_proximity_mm": 15.0
         }
     },
-    "output_config": {
+    "model_config": {
+        "target_bones": [
+            "femur",
+            "tibia"
+        ],
         "model_directory": "./experiments/models"
+    },
+    "output_config": {
     }
 }

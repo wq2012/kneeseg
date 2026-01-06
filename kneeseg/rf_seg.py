@@ -4,7 +4,7 @@ import joblib
 from .features import extract_features, compute_signed_distance_transforms
 
 class CartilageClassifier:
-    def __init__(self, n_estimators=100, max_depth=15, n_jobs=-1):
+    def __init__(self, n_estimators=100, max_depth=15, n_jobs=-1, target_bones=None):
         self.clf = RandomForestClassifier(
             n_estimators=n_estimators, 
             max_depth=max_depth, 
@@ -12,6 +12,7 @@ class CartilageClassifier:
             random_state=42,
             class_weight='balanced'
         )
+        self.target_bones = target_bones
 
     def train(self, images, bone_masks, labels, landmarks_list=None, landmark_indices=None, prob_maps=None):
         """
@@ -36,13 +37,13 @@ class CartilageClassifier:
             lms = landmarks_list[i] if landmarks_list else None
             pm = prob_maps[i] if prob_maps else None
             
-            X = extract_features(img, dts, mask=mask, landmarks_dict=lms, landmark_indices=landmark_indices, prob_map=pm)
+            X = extract_features(img, dts, mask=mask, landmarks_dict=lms, landmark_indices=landmark_indices, prob_map=pm, sorted_bones_override=self.target_bones)
             y = lbl.flatten()[mask]
             
             # Additional random subsampling to speed up training
-            if len(y) > 50000:
+            if len(y) > 25000:
                 np.random.seed(42) # For reproducibility
-                indices = np.random.choice(len(y), 50000, replace=False)
+                indices = np.random.choice(len(y), 25000, replace=False) # Reduced for OAI scale
                 X = X[indices]
                 y = y[indices]
 
@@ -68,7 +69,7 @@ class CartilageClassifier:
         mask = min_dt.flatten() < proximity_mm # Use configurable proximity
         
         X = extract_features(image, dts, mask=mask, landmarks_dict=landmarks_dict, 
-                             landmark_indices=landmark_indices, prob_map=prob_map)
+                             landmark_indices=landmark_indices, prob_map=prob_map, sorted_bones_override=self.target_bones)
         
         # Initial prediction (only for masked voxels)
         y_pred_masked = self.clf.predict(X)
@@ -94,7 +95,7 @@ class CartilageClassifier:
         min_dt = np.min([np.abs(d) for d in dts.values()], axis=0)
         mask = min_dt.flatten() < proximity_mm
         
-        X = extract_features(image, dts, mask=mask, landmarks_dict=landmarks_dict, landmark_indices=landmark_indices) # Pass 1 has no prob_map
+        X = extract_features(image, dts, mask=mask, landmarks_dict=landmarks_dict, landmark_indices=landmark_indices, sorted_bones_override=self.target_bones) # Pass 1 has no prob_map
         
         y_prob_masked = self.clf.predict_proba(X)
         

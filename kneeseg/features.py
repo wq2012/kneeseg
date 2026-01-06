@@ -139,7 +139,7 @@ def compute_dt_arithmetic_features(dts, mask=None):
         features.append(f - t) 
     return features
 
-def extract_features(image, dts, sigma=1.0, mask=None, r_shifts=30, landmarks_dict=None, landmark_indices=None, prob_map=None, spacing=None):
+def extract_features(image, dts, sigma=1.0, mask=None, r_shifts=30, landmarks_dict=None, landmark_indices=None, prob_map=None, spacing=None, sorted_bones_override=None):
     """
     Optimized feature extraction that avoids 4D intermediate arrays and respects masks.
     """
@@ -167,13 +167,34 @@ def extract_features(image, dts, sigma=1.0, mask=None, r_shifts=30, landmarks_di
     features.append(get_masked(gaussian_gradient_magnitude(image_norm, sigma=sigma)))
     
     # 5. DTs
-    for bone in sorted(dts.keys()):
-        features.append(get_masked(dts[bone]))
+    if sorted_bones_override is None:
+        # Legacy behavior: use whatever is in dts
+        bones_to_use = sorted(dts.keys())
+    else:
+        # Strict mode: use specific bones in specific order
+        bones_to_use = sorted_bones_override
+
+    for bone in bones_to_use:
+        if bone in dts:
+            features.append(get_masked(dts[bone]))
+        else:
+            # Missing bone feature (e.g. Patella missing in SKI10 inference but expected by OAI model, 
+            # or vice versa if we want robust feature vectors of fixed size)
+            # Use large distance (e.g. 100.0) for missing bone
+            # We need to append a vector of same size as others
+            # get_masked returns flat array of size N_masked
+            # We can use shape from an existing feature (like Intensity)
+            ref_shape = features[0].shape
+            features.append(np.full(ref_shape, 100.0, dtype=np.float32))
         
     # 6. DT Arithmetic
+    # Only compute if 'femur' and 'tibia' are present/logic applies
     dt_arith = compute_dt_arithmetic_features(dts, mask=mask)
     for f in dt_arith:
-        features.append(f.astype(np.float32))
+        if mask is None:
+            features.append(f.flatten().astype(np.float32))
+        else:
+            features.append(f.astype(np.float32))
         
     # 7. RSID (Mask-aware)
     if mask is not None and mask.ndim == 3:
