@@ -21,18 +21,15 @@ def validate_config(config):
     # We will try to find the schema file relative to the package installation
     # or use a bundled schema.
     
-    # For now, let's look in typical locations
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # kneeseg/
-    schema_path = os.path.join(base_dir, 'configs', 'config_schema.json')
-    
+    pkg_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = os.path.dirname(pkg_dir)
+    schema_path = os.path.join(pkg_dir, 'configs', 'config_schema.json')
+
     if not os.path.exists(schema_path):
-        # Fallback for development env
-        # Try to find it in the delivery folder if we are running from source
-        # This is a bit hacky but works for this context
         potential_paths = [
-            'delivery/kneeseg/configs/config_schema.json',
+            os.path.join(base_dir, 'configs', 'config_schema.json'),
             'kneeseg/configs/config_schema.json',
-            '/usr/local/google/home/quanw/Code/siemens_2012/delivery/kneeseg/configs/config_schema.json' 
+            'delivery/kneeseg/configs/config_schema.json',
         ]
         for p in potential_paths:
             if os.path.exists(p):

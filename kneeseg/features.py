@@ -1,6 +1,23 @@
 import numpy as np
 from scipy.ndimage import distance_transform_edt, gaussian_gradient_magnitude, gaussian_filter
 
+import SimpleITK as sitk
+
+def fast_signed_distance_transform(mask, spacing=None):
+    """
+    Fast exact Euclidean Signed Distance Transform using SimpleITK SignedMaurerDistanceMap.
+    Negative inside bone, positive outside.
+    """
+    if not np.any(mask > 0):
+        return np.full(mask.shape, 100.0, dtype=np.float32)
+    sitk_img = sitk.GetImageFromArray((mask > 0).astype(np.uint8))
+    if spacing is not None:
+        sitk_img.SetSpacing(tuple(float(s) for s in spacing[::-1]))
+    sdt = sitk.SignedMaurerDistanceMap(
+        sitk_img, insideIsPositive=False, squaredDistance=False, useImageSpacing=True
+    )
+    return sitk.GetArrayFromImage(sdt).astype(np.float32)
+
 def compute_signed_distance_transforms(bone_masks, spacing=None):
     """
     Computes Signed Distance Transforms (SDT) for each bone mask.

@@ -17,7 +17,13 @@ def load_default_configs():
         train_config = json.load(f)
     with open(infer_cfg_path, 'r') as f:
         infer_config = json.load(f)
-        
+
+    pkg_split_path = os.path.join(base_dir, 'data', 'ski10_full_split.json')
+    for cfg in (train_config, infer_config):
+        sf = cfg.get('data_config', {}).get('split_file')
+        if sf and not os.path.exists(sf) and os.path.exists(pkg_split_path):
+            cfg['data_config']['split_file'] = pkg_split_path
+
     return train_config, infer_config
 
 def main():
@@ -32,21 +38,23 @@ def main():
     if args.data_dir:
         # Override data paths
         train_config['data_config']['image_directory'] = args.data_dir
-        train_config['data_config']['label_directory'] = args.data_dir + "_labels" # Assumption?
-        # Actually SKI10 has images and labels. I'll let user configure via JSON if complex.
-        # But this is simple override.
+        train_config['data_config']['label_directory'] = args.data_dir + "_labels"
         infer_config['data_config']['image_directory'] = args.data_dir
         infer_config['data_config']['label_directory'] = args.data_dir + "_labels"
         
-    model_dir = train_config['output_config']['model_directory']
+    model_dir = train_config.get('model_config', {}).get(
+        'model_directory',
+        train_config.get('output_config', {}).get('model_directory', './experiments/models')
+    )
     eval_dir = infer_config['output_config']['prediction_directory']
     
-    # Ensure paths are absolute or relative to CWD?
-    # Configs in package had "experiments/..." which assumes running from root.
-    # I should verify paths.
-    
     # 2. Check Training Status
-    required_models = ['bone_rf_p1.joblib', 'bone_rf_p2.joblib', 'cartilage_rf.joblib']
+    required_models = [
+        'bone_rf_p1.joblib',
+        'bone_rf_p2.joblib',
+        'cartilage_rf_p1.joblib',
+        'cartilage_rf_p2.joblib',
+    ]
     all_models_exist = all(os.path.exists(os.path.join(model_dir, m)) for m in required_models)
     
     if all_models_exist:

@@ -1,15 +1,15 @@
-
 import unittest
 import os
 import sys
 
 def run_tests():
-    # Add current directory to path
-    sys.path.append(os.getcwd())
+    sys.path.insert(0, os.getcwd())
     
     loader = unittest.TestLoader()
-    start_dir = 'delivery/tests'
-    suite = loader.discover(start_dir)
+    suite = unittest.TestSuite()
+    for test_dir in ['kneeseg/tests', 'tests']:
+        if os.path.exists(test_dir):
+            suite.addTests(loader.discover(test_dir))
     
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)

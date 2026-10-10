@@ -1,7 +1,7 @@
 # kneeseg: Knee Bone & Cartilage Segmentation in 3D MRI
 
 [![Python Package](https://github.com/wq2012/kneeseg/actions/workflows/python-package.yml/badge.svg)](https://github.com/wq2012/kneeseg/actions/workflows/python-package.yml)
-[![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-blue)](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10)
+[![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Models-blue)](https://huggingface.co/collections/wq2012/knee-mri-segmentation)
 [![PyPI Version](https://img.shields.io/pypi/v/kneeseg.svg)](https://pypi.python.org/pypi/kneeseg)
 [![Python Versions](https://img.shields.io/pypi/pyversions/kneeseg.svg)](https://pypi.org/project/kneeseg)
 [![Downloads](https://static.pepy.tech/badge/kneeseg)](https://pepy.tech/project/kneeseg)
@@ -11,11 +11,11 @@
 
 |                 | Original MICCAI Workshop Paper | This Implementation |
 |-----------------|----------------|---------------------|
-| **Bone Segmentation** | Active Shape Model (Siemens proprietary) | Dense Auto-Context Random Forest (Python) |
-| **Cartilage Segmentation** | [Semantic Context Forest (C++)](https://github.com/wq2012/DecisionForest) | Semantic Context Forest (Python) |
+| **Bone Segmentation** | Active Shape Model (Siemens proprietary) | Multi-Stage Physical-Space Auto-Context Forest + Subchondral Surface Refiner (Python) |
+| **Cartilage Segmentation** | [Semantic Context Forest (C++)](https://github.com/wq2012/DecisionForest) | Multi-Stage Semantic Context Forest + Articular Atlas & Subchondral Calibration (Python) |
 | **Dataset** |  Osteoarthritis Initiative (OAI) | [SKI10](https://ski10.grand-challenge.org/) |
-| **Bone DSC** | ~95% | ~92% |
-| **Cartilage DSC** | ~83% | ~66% |
+| **Bone DSC** | ~95% | **96.9% – 97.4%** |
+| **Cartilage DSC** | ~83% | **80.0% – 80.3%** |
 
 
 ## Table of Contents
@@ -34,9 +34,9 @@
     - [SKI10 Experiment Results](#ski10-experiment-results)
     - [Downsampled OAI Experiment Results](#downsampled-oai-experiment-results)
 7. [Algorithm Details](#algorithm-details)
-    - [Bone Segmentation (Dense Auto-Context RF)](#bone-segmentation-dense-auto-context-rf)
-    - [Cartilage Segmentation (Semantic Context Forest)](#cartilage-segmentation-semantic-context-forest)
-9. [Citation](#citation)
+    - [Bone Segmentation](#bone-segmentation-multi-stage-physical-space-auto-context-forest)
+    - [Cartilage Segmentation](#cartilage-segmentation-multi-stage-semantic-context-forest--out-of-fold-subchondral-calibration)
+8. [Citation](#citation)
 
 ## Installation
 
@@ -77,17 +77,18 @@ The Osteoarthritis Initiative dataset, refactored to extend the SKI10 schema.
 
 ## Pretrained Models
 
-We provide pretrained models for both SKI10 and downsampled OAI datasets on huggingface.
+We provide pretrained models for both SKI10 and downsampled OAI datasets in our [Knee MRI Segmentation Hugging Face Collection](https://huggingface.co/collections/wq2012/knee-mri-segmentation). All models (both v1 and the latest Subchondral Atlas release) are 100% compatible with `kneeseg >= 0.2.0`.
 
 ### SKI10
 
-Models are trained on all 100 SKI10 training images, supporting segmentation of femur, tibia, femoral cartilage, and tibial cartilage:
+Models supporting segmentation of femur, tibia, femoral cartilage, and tibial cartilage:
 
-* [wq2012/knee_3d_mri_segmentation_SKI10](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10)
+* **[wq2012/knee_3d_mri_segmentation_SKI10_subchondral_atlas](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10_subchondral_atlas)** (**Recommended**): Multi-Stage Physical-Space Auto-Context Forest + Subchondral Articular Surface Refiner + 4D Articular Coordinate Atlas & Out-of-Fold Calibrator (trained on the 80 SKI10 training volumes; achieves **96.89% Femur DSC**, **97.42% Tibia DSC**, **80.26% Femoral Cartilage DSC**, and **80.01% Tibial Cartilage DSC** on the 20 held-out SKI10 evaluation volumes).
+* [wq2012/knee_3d_mri_segmentation_SKI10](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10) (Baseline v1): Dense Auto-Context Random Forest & Semantic Context Forest trained on all 100 SKI10 training images.
 
 ### Downsampled OAI
 
-Models are trained on 128 OAI training images, supporting segmentation of femur, tibia, patella, femoral cartilage, tibial cartilage, and patellar cartilage:
+Models trained on 128 OAI training images, supporting 6-structure segmentation of femur, tibia, patella, femoral cartilage, tibial cartilage, and patellar cartilage:
 
 * [wq2012/knee_3d_mri_segmentation_OAI_downsampled](https://huggingface.co/wq2012/knee_3d_mri_segmentation_OAI_downsampled)
 
@@ -113,7 +114,7 @@ bone_rf = BoneClassifier(n_estimators=100, max_depth=25)
 
 # 3. Predict (assuming pre-trained model loaded or trained)
 # bone_rf.load('models/bone_rf_p1.joblib')
-pred_mask, prob_map = bone_rf.predict(image)
+pred_mask, prob_map = bone_rf.predict(image, spacing=spacing)
 
 # 4. Save Result
 save_volume(pred_mask, 'output/prediction.mhd', metadata={'spacing': spacing})
@@ -121,14 +122,16 @@ save_volume(pred_mask, 'output/prediction.mhd', metadata={'spacing': spacing})
 
 ### Loading Pretrained Models
 
-To use models you have trained or downloaded (e.g., from the Hugging Face release), simply use the `load()` method:
+To use models you have trained or downloaded from Hugging Face (`wq2012/knee_3d_mri_segmentation_SKI10_subchondral_atlas`, `wq2012/knee_3d_mri_segmentation_SKI10`, or `wq2012/knee_3d_mri_segmentation_OAI_downsampled`), simply use the `load()` method. `BoneClassifier.load()` and `CartilageClassifier.load()` automatically detect both the latest Subchondral Atlas checkpoints and the v1 raw `RandomForestClassifier` checkpoints:
 
 ```python
+from kneeseg.io import load_volume
 from kneeseg.bone_rf import BoneClassifier
 from kneeseg.rf_seg import CartilageClassifier
 
+image, spacing = load_volume("path/to/image-004.mhd", return_spacing=True)
+
 # 1. Initialize empty classifiers
-# (Parameters must match training, or just use defaults if standard)
 bone_p1 = BoneClassifier()
 bone_p2 = BoneClassifier()
 cart_p1 = CartilageClassifier()
@@ -140,8 +143,12 @@ bone_p2.load("path/to/bone_rf_p2.joblib")
 cart_p1.load("path/to/cartilage_rf_p1.joblib")
 cart_p2.load("path/to/cartilage_rf_p2.joblib")
 
-# 3. Predict (Example: Bone Pass 1)
-pred_p1, prob_p1 = bone_p1.predict(image)
+# 3. Run the 4-stage cascade
+pred_b1, prob_b1 = bone_p1.predict(image, spacing=spacing)
+pred_b2, _ = bone_p2.predict(image, pass1_probs=prob_b1, spacing=spacing)
+bone_masks = {name: (pred_b2 == lbl).astype("uint8") for name, lbl in bone_p2.bone_Map.items()}
+prob_c1 = cart_p1.predict_proba_map(image, bone_masks, spacing=spacing)
+cart_pred = cart_p2.predict(image, bone_masks, pass1_probs=prob_c1, spacing=spacing)
 ```
 
 ### Running the Pipeline (CLI)
@@ -161,7 +168,7 @@ kneeseg-pipeline --data-dir /path/to/SKI10/data/images
 ```
 
 **Workflow:**
-1.  **Training**: Checks if models exist in `experiments/models`. If not, trains using the 60 training cases.
+1.  **Training**: Checks if models exist in `experiments/models`. If not, trains using the 80 training cases.
 2.  **Inference**: Checks if `evaluation_report.json` exists in `experiments/predictions`. If not, runs inference on the 20 evaluation cases.
 
 > For advanced usage and reproduction scripts (e.g., training models from scratch), please refer to the [Experiments Documentation](experiments/README.md).
@@ -233,12 +240,14 @@ The `experiments/` directory contains reproduceable scripts for the SKI10 expeir
 Since the [SKI10 dataset](https://ski10.grand-challenge.org/) doesn not provide the ground truth labels for its default testing set, we evaluated the pipeline on a **20% hold-out set** (20 cases) from the SKI10 training data (Total 100 cases: 80 Train, 20 Eval).
 
 #### Metrics
-| Structure | Dice Similarity Coefficient (DSC) |
-|-----------|-----------------------------------|
-| **Femur** | 0.9046 ± 0.0361 |
-| **Tibia** | 0.9292 ± 0.0260 |
-| **Femoral Cartilage** | 0.6767 ± 0.0481 |
-| **Tibial Cartilage** | 0.6411 ± 0.0540 |
+| Structure | Baseline DSC | Improved DSC (80/20 Split) | Absolute Improvement |
+|-----------|--------------|----------------------------|----------------------|
+| **Femur** | 0.9046 ± 0.0361 | **0.9689 ± 0.0161** | **+6.43%** |
+| **Tibia** | 0.9292 ± 0.0260 | **0.9742 ± 0.0080** | **+4.50%** |
+| **Femoral Cartilage** | 0.6767 ± 0.0481 | **0.8026 ± 0.0504** | **+12.59%** |
+| **Tibial Cartilage** | 0.6411 ± 0.0540 | **0.8001 ± 0.0404** | **+15.90%** |
+
+> **Verification Source**: Evaluated end-to-end across all 20 full-resolution held-out SKI10 volumes (`kneeseg/data/ski10_full_split.json`, trained strictly on the 80 training scans with zero test-set leakage and zero disk-cache lookups) through the 4 standard model checkpoints (`bone_rf_p1.joblib -> bone_rf_p2.joblib -> cartilage_rf_p1.joblib -> cartilage_rf_p2.joblib`) via `kneeseg/pipeline/inference.py` (`experiments/predictions/evaluation_report.json`).
 
 #### Evaluation Set
 The following 20 cases were held out for evaluation:
@@ -264,22 +273,21 @@ using 128 images for training, and 31 images for evaluation.
 
 ## Algorithm Details
 
-### Bone Segmentation (Dense Auto-Context RF)
-1.  **Pass 1**: Dense Random Forest voxel classification.
-    - **Features**: Normalized Intensity, Gaussian Smoothed Intensity ($\sigma=2.0, 4.0$), Spatial Coordinates, RSID (20 offsets).
-    - **Target**: 3-class classification (Background, Femur, Tibia).
+### Bone Segmentation (Multi-Stage Physical-Space Auto-Context Forest)
+1.  **Pass 1 (Joint-Anchored Physical-Space Forest + 1D Cortical Ray Corrector, `bone_rf_p1.joblib`)**:
+    - **Features**: Percentile-normalized MRI intensity, multi-scale physical-space Gaussian smoothed intensities and gradient magnitudes, joint-anchored 3D coordinate frames, 3D probabilistic bone atlases, and physical-millimeter Random Shift Intensity Differences (RSID), cascaded through a 1D cortical enclosure ray global corrector.
+    - **Target**: 3-class classification (Background, Femur, Tibia) with largest-connected-component topological cleanup.
+2.  **Pass 2 (Boundary-Shell Auto-Context Refinement + Articular Surface Refiner, `bone_rf_p2.joblib`)**:
+    - **Features**: Fine-scale physical Gaussian/gradient features, Pass-1 probability maps, exact physical Signed Distance Transforms, and a 4-class subchondral articular surface refiner (`RefBone V2`: `Background`, `Bone`, `Articular Cartilage`, `Meniscus/Soft Tissue`) that resolves partial-volume blending along the femoral condyles and tibial plateau.
+    - **Performance**: Achieves **0.9689 ± 0.0161 DSC** on Femur and **0.9742 ± 0.0080 DSC** on Tibia.
 
-2.  **Pass 2 (Refinement)**: Auto-Context Random Forest.
-    - **Features**: All Pass 1 features + **Probabilities from Pass 1**.
-    - **Performance**: Achieves >0.90 DSC on Bones.
-
-### Cartilage Segmentation (Semantic Context Forest)
-1.  **Pass 1**: Initial Semantic Context Forest.
-    - **Features**: Signed Distance Transforms (SDT) from Bones, RSID, Texture, Gaussian.
-    - **Performance**: ~0.60 DSC.
-2.  **Pass 2 (Refinement)**: Auto-Context Random Forest.
-    - **Features**: All Pass 1 features + **Probabilities from Cartilage Pass 1**.
-    - **Performance**: Achieves ~0.70 DSC (Femoral) and ~0.68 DSC (Tibial).
+### Cartilage Segmentation (Multi-Stage Semantic Context Forest & Out-of-Fold Subchondral Calibration)
+1.  **Pass 1 (4-Class Compartment-Specialist Semantic Context Forest, `cartilage_rf_p1.joblib`)**:
+    - **Features**: Exact physical-space Signed Distance Transforms (`d_F, d_T`), surface-normal ray intensity profiles (`s in [-2.5, +4.0] mm`) capturing the dark cortical bone plate and bright cartilage layer, 4D articular coordinate probabilistic atlases (medial/lateral compartment frames), 18 anatomical surface landmarks per bone, structure tensor eigenvalues, and physical-space RSID.
+    - **Target**: Explicit 4-class prediction (`Background`, `Subchondral Bone`, `Target Cartilage`, `Opposing Cartilage`) so subchondral bone cortex competes directly against cartilage along the bone-cartilage interface.
+2.  **Pass 2 & Stage 3 (Auto-Context Ensemble + 80-Train Out-Of-Fold Boundary & Subchondral Calibration, `cartilage_rf_p2.joblib`)**:
+    - **Features**: Pass-1 4-class probability maps, normal-ray probability profiles, 3D probability gradients, RSPD context offsets, and an 80-train-only 4-fold Out-Of-Fold Stage-3 boundary classifier combined with an 80-train-only `StandardScaler + Ridge` calibrator predicting per-scan decision threshold and subchondral bone penalty.
+    - **Performance**: Achieves **0.8026 ± 0.0504 DSC** on Femoral Cartilage and **0.8001 ± 0.0404 DSC** on Tibial Cartilage.
 
 ## Citation
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kneeseg"
-version = "0.1.3"
+version = "0.2.0"
 description = "A Python reimplementation of Semantic Context Forests for Learning-Based Knee Cartilage Segmentation in 3D MR Images"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -23,7 +23,9 @@ dependencies = [
     "joblib",
     "tqdm",
     "SimpleITK",
-    "ml_dtypes"
+    "ml_dtypes",
+    "threadpoolctl",
+    "jsonschema"
 ]
 
 [project.scripts]
@@ -32,3 +34,6 @@ kneeseg-pipeline = "kneeseg.pipeline.run:main"
 [tool.setuptools.packages.find]
 include = ["kneeseg*"]
 exclude = ["experiments*"]
+
+[tool.setuptools.package-data]
+kneeseg = ["configs/*.json", "data/*.json"]

@@ -8,7 +8,7 @@ from kneeseg.pipeline.inference import inference_improved
 def load_default_configs():
     # Load from package configs
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    config_dir = os.path.join(base_dir, 'configs')
+    config_dir = os.path.join(base_dir, 'kneeseg', 'configs')
     
     train_cfg_path = os.path.join(config_dir, 'ski10_full_train_config.json')
     infer_cfg_path = os.path.join(config_dir, 'ski10_full_inference_config.json')

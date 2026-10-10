@@ -71,5 +71,164 @@ class TestOAICompatibility(unittest.TestCase):
             
         self.assertTrue(success)
 
+    def test_bone_classifier_pass1_and_pass2_no_name_error(self):
+        clf_p1 = BoneClassifier(n_estimators=2, max_depth=4, n_jobs=1)
+        img = np.zeros((32, 32, 32), dtype=np.float32)
+        img[8:16, 8:24, 8:24] = 100.0
+        img[18:26, 8:24, 8:24] = 120.0
+        lbl = np.zeros((32, 32, 32), dtype=np.uint8)
+        lbl[8:16, 8:24, 8:24] = 1
+        lbl[16:18, 10:22, 10:22] = 2
+        lbl[18:26, 8:24, 8:24] = 3
+        clf_p1.train([img, img + 1.0], [lbl, lbl], spacings=[(1.5, 1.5, 1.5), (1.5, 1.5, 1.5)])
+        _, pm1 = clf_p1.predict(img, spacing=(1.5, 1.5, 1.5))
+        _, pm2 = clf_p1.predict(img + 1.0, spacing=(1.5, 1.5, 1.5))
+        clf_p2 = BoneClassifier(n_estimators=2, max_depth=4, n_jobs=1)
+        clf_p2.train([img, img + 1.0], [lbl, lbl], prob_maps=[pm1, pm2], spacings=[(1.5, 1.5, 1.5), (1.5, 1.5, 1.5)])
+        pred_p2, prob_p2 = clf_p2.predict(img, prob_map=pm1, spacing=(1.5, 1.5, 1.5))
+        self.assertEqual(pred_p2.shape, img.shape)
+        self.assertEqual(prob_p2.shape[:3], img.shape)
+
+    def test_v2_bone_and_v6_cartilage_uncached_volume(self):
+        import os
+        from kneeseg.bone_rf import _BONE_OOF_PROB_CACHE, _BONE_V2_SESSION_CACHE
+        from kneeseg.cartilage_v6 import _CART_P1_SESSION_CACHE
+
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        b1_path = os.path.join(base_dir, 'experiments', 'models', 'bone_rf_p1.joblib')
+        b2_path = os.path.join(base_dir, 'experiments', 'models', 'bone_rf_p2.joblib')
+        c1_path = os.path.join(base_dir, 'experiments', 'models', 'cartilage_rf_p1.joblib')
+        c2_path = os.path.join(base_dir, 'experiments', 'models', 'cartilage_rf_p2.joblib')
+        if not (os.path.exists(b1_path) and os.path.exists(b2_path) and os.path.exists(c1_path) and os.path.exists(c2_path)):
+            return
+        b1 = BoneClassifier()
+        b1.load(b1_path)
+        b2 = BoneClassifier()
+        b2.load(b2_path)
+        c1 = CartilageClassifier()
+        c1.load(c1_path)
+        c2 = CartilageClassifier()
+        c2.load(c2_path)
+
+        ref_v2 = b2._get_ref_v2()
+        for bone_key in ('tibia', 'femur'):
+            for et_key in ('et_v1', 'et_v2'):
+                n_j = getattr(ref_v2[bone_key][et_key], 'n_jobs', 1)
+                self.assertTrue(1 <= n_j <= 16, f"{bone_key}.{et_key}.n_jobs={n_j} should be bounded")
+
+        # Synthetic uncached volume (fingerprint guaranteed not in eval cache)
+        img = np.zeros((36, 40, 40), dtype=np.float32)
+        img[8:18, 6:20, 10:30] = 150.0
+        img[8:18, 22:36, 10:30] = 160.0
+        bm_pred1, bm_prob1 = b1.predict(img, spacing=(1.5, 1.5, 1.5))
+        self.assertEqual(bm_pred1.shape, img.shape)
+        self.assertEqual(bm_prob1.shape, (*img.shape, 3))
+        self.assertTrue(np.any(bm_prob1[..., 1:3] > 0.0))
+
+        bm_pred, bm_prob = b2.predict(img, prob_map=bm_prob1, spacing=(1.5, 1.5, 1.5))
+        self.assertEqual(bm_pred.shape, img.shape)
+        self.assertEqual(bm_prob.shape[:3], img.shape)
+
+        synth_bones = {'femur': np.zeros_like(img, dtype=np.uint8), 'tibia': np.zeros_like(img, dtype=np.uint8)}
+        synth_bones['femur'][8:18, 6:20, 10:30] = 1
+        synth_bones['tibia'][8:18, 22:36, 10:30] = 1
+        c_prob1 = c1.predict_proba_map(img, synth_bones, spacing=(1.5, 1.5, 1.5))
+        self.assertEqual(c_prob1.shape, (*img.shape, 3))
+        self.assertTrue(np.any(c_prob1[..., 1:3] > 0.0))
+
+        y_cart, p_cart = c2.predict(img, synth_bones, prob_map=c_prob1, spacing=(1.5, 1.5, 1.5))
+        self.assertEqual(y_cart.shape, img.shape)
+        self.assertEqual(p_cart.shape[:3], img.shape)
+
+        # Verify repeat c2.predict produces identical output and preserves session cache
+        y_cart_rep, p_cart_rep = c2.predict(img, synth_bones, prob_map=c_prob1, spacing=(1.5, 1.5, 1.5))
+        np.testing.assert_array_equal(y_cart, y_cart_rep)
+        np.testing.assert_allclose(p_cart, p_cart_rep)
+
+        # Verify clearing session caches still recovers identical Pass-1 and Pass-2 predictions
+        _BONE_V2_SESSION_CACHE.clear()
+        _BONE_OOF_PROB_CACHE.clear()
+        _CART_P1_SESSION_CACHE.clear()
+        c_prob1_nocache = c1.predict_proba_map(img, synth_bones, spacing=(1.5, 1.5, 1.5))
+        y_cart_nocache, p_cart_nocache = c2.predict(img, synth_bones, prob_map=c_prob1_nocache, spacing=(1.5, 1.5, 1.5))
+        np.testing.assert_allclose(c_prob1, c_prob1_nocache)
+        np.testing.assert_array_equal(y_cart, y_cart_nocache)
+        np.testing.assert_allclose(p_cart, p_cart_nocache)
+
+    def test_no_cache_or_sys_path_hacks_in_kneeseg_package(self):
+        import os
+        import kneeseg.pipeline.inference
+        import kneeseg.pipeline.train
+        import kneeseg.pipeline.run
+
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        pkg_dir = os.path.join(base_dir, 'kneeseg')
+        for root, _, files in os.walk(pkg_dir):
+            for fname in files:
+                if not fname.endswith('.py'):
+                    continue
+                full_path = os.path.join(root, fname)
+                rel_path = os.path.relpath(full_path, base_dir)
+                with open(full_path, 'r', encoding='utf-8') as f:
+                    src = f.read()
+                self.assertNotIn('experiments/cache', src, f"Found cache lookup in {rel_path}")
+                self.assertNotIn("os.path.join(base_dir, 'experiments', 'cache')", src, f"Found cache lookup in {rel_path}")
+                self.assertNotIn('sys.path.insert', src, f"Found sys.path.insert in {rel_path}")
+                self.assertNotIn('/usr/local/google/home/quanw', src, f"Found hardcoded user path in {rel_path}")
+
+    def test_legacy_v1_raw_rf_checkpoint_backward_compatibility(self):
+        import os
+        import tempfile
+        import joblib
+        from sklearn.ensemble import RandomForestClassifier
+
+        img = np.random.RandomState(0).rand(12, 12, 12).astype(np.float32)
+        lbl_oai = np.zeros((12, 12, 12), dtype=np.uint8)
+        lbl_oai[2:5, 2:5, 2:5] = 1
+        lbl_oai[5:6, 2:5, 2:5] = 2
+        lbl_oai[6:9, 2:5, 2:5] = 3
+        lbl_oai[9:10, 2:5, 2:5] = 4
+        lbl_oai[2:5, 6:9, 2:5] = 5
+        lbl_oai[5:6, 6:9, 2:5] = 6
+
+        bone_masks_oai = {
+            'femur': (lbl_oai == 1).astype(np.uint8),
+            'tibia': (lbl_oai == 3).astype(np.uint8),
+            'patella': (lbl_oai == 5).astype(np.uint8),
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Train & dump raw sklearn RandomForestClassifier objects like v1 HF repos
+            b1_train = BoneClassifier(n_estimators=2, max_depth=3, n_jobs=1)
+            b1_train.clf = RandomForestClassifier(n_estimators=2, max_depth=3, random_state=42)
+            b1_train.train([img], [lbl_oai], subsample=200)
+            b1_path = os.path.join(tmpdir, 'bone_rf_p1.joblib')
+            joblib.dump(b1_train.clf, b1_path)
+
+            c1_train = CartilageClassifier(n_estimators=2, max_depth=3, n_jobs=1, target_bones=['femur', 'tibia', 'patella'])
+            c1_train.clf = RandomForestClassifier(n_estimators=2, max_depth=3, random_state=42)
+            c1_train.train([img], [bone_masks_oai], [lbl_oai])
+            c1_path = os.path.join(tmpdir, 'cartilage_rf_p1.joblib')
+            joblib.dump(c1_train.clf, c1_path)
+
+            # Load without passing target_bones (as in HF README snippets)
+            b1_loaded = BoneClassifier()
+            b1_loaded.load(b1_path)
+            self.assertEqual(b1_loaded.stage, 0)
+            b_pred, b_prob = b1_loaded.predict(img)
+            self.assertEqual(b_pred.shape, img.shape)
+            self.assertEqual(b_prob.shape, (*img.shape, 4))
+
+            c1_loaded = CartilageClassifier()
+            c1_loaded.load(c1_path)
+            self.assertEqual(c1_loaded.stage, 0)
+            self.assertEqual(c1_loaded.target_bones, ['femur', 'tibia', 'patella'])
+            c_prob = c1_loaded.predict_proba_map(img, bone_masks_oai, proximity_mm=20.0)
+            c_pred, _ = c1_loaded.predict(img, bone_masks_oai, proximity_mm=20.0)
+            self.assertEqual(c_pred.shape, img.shape)
+            self.assertEqual(c_prob.shape, (*img.shape, 7))
+
 if __name__ == '__main__':
     unittest.main()
+
+
