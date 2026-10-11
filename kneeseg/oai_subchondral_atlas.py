@@ -715,9 +715,10 @@ def predict_p0_case(img_s, sp_s, full_shape, sp_full, p0_models_list, atl_fov):
     if not np.any(cand0):
         cand0 = np.ones(img_s.shape, dtype=bool)
     X0 = extract_base_strided_features(img_s, sp_s, cand0, atl_fov)
+    max_n_jobs = min(8, os.cpu_count() or 4)
     for m in p0_models_list:
-        if hasattr(m, 'n_jobs') and getattr(m, 'n_jobs', 1) not in range(1, 17):
-            m.n_jobs = 8
+        if hasattr(m, 'n_jobs') and getattr(m, 'n_jobs', 1) not in range(1, max_n_jobs + 1):
+            m.n_jobs = max_n_jobs
     with joblib.parallel_backend('threading'):
         p0 = sum(m.predict_proba(X0) for m in p0_models_list) / float(len(p0_models_list))
     v0 = np.zeros((*img_s.shape, 4), dtype=np.float32)
@@ -757,9 +758,10 @@ def predict_tierA_3bone_case(img, sp, img_s, sp_s, df_s, dt_s, dp_s, c_j, span_z
         cand = np.ones(img_s.shape, dtype=bool)
     X_base = extract_base_strided_features(img_s, sp_s, cand, atl_3b[:3])
     X_c = augment_tierA_3bone_features(X_base, img_s.shape, sp_s, df_s, dt_s, dp_s, c_j, span_z, cand, atl_3b)
+    max_n_jobs = min(8, os.cpu_count() or 4)
     for m in tierA_models_list:
-        if hasattr(m, 'n_jobs') and getattr(m, 'n_jobs', 1) not in range(1, 17):
-            m.n_jobs = 8
+        if hasattr(m, 'n_jobs') and getattr(m, 'n_jobs', 1) not in range(1, max_n_jobs + 1):
+            m.n_jobs = max_n_jobs
     with joblib.parallel_backend('threading'):
         p_pred = sum(m.predict_proba(X_c) for m in tierA_models_list) / float(len(tierA_models_list))
 
@@ -799,8 +801,8 @@ def predict_tierA_3bone_case(img, sp, img_s, sp_s, df_s, dt_s, dp_s, c_j, span_z
         )
         if np.any(cand_pat):
             for m in pat_models_list:
-                if hasattr(m, 'n_jobs') and getattr(m, 'n_jobs', 1) not in range(1, 17):
-                    m.n_jobs = 8
+                if hasattr(m, 'n_jobs') and getattr(m, 'n_jobs', 1) not in range(1, max_n_jobs + 1):
+                    m.n_jobs = max_n_jobs
             with joblib.parallel_backend('threading'):
                 p_pat_spec = sum(m.predict_proba(X_pat)[:, 1] for m in pat_models_list) / float(len(pat_models_list))
             vol_pat = 0.20 * pp_up
@@ -828,9 +830,10 @@ def refine_one_bone_3bone_v2(
         m0 = (bm_a[bone_name] > 0).astype(np.uint8)
         return (m0, m0) if return_v1 else m0
 
+    max_et_jobs = min(max(os.cpu_count() or 4, 1), 16)
     for et_key in ('et_v1', 'et_whole', 'et_sub'):
-        if et_key in m_d and getattr(m_d[et_key], 'n_jobs', 1) not in range(1, 17):
-            m_d[et_key].n_jobs = min(max(os.cpu_count() or 8, 1), 16)
+        if et_key in m_d and getattr(m_d[et_key], 'n_jobs', 1) not in range(1, max_et_jobs + 1):
+            m_d[et_key].n_jobs = max_et_jobs
 
     with joblib.parallel_backend('threading'):
         p1 = m_d['et_v1'].predict_proba(X1)[:, 1].astype(np.float32)
@@ -921,13 +924,16 @@ def predict_oai_bone_p1(img, spacing, model_dict):
         model_dict['tierA_models'], atl_a,
         pat_models_list=model_dict.get('pat_models'), pat_atl=model_dict.get('pat_atl_full')
     )
+    pred_c, prob_c = _pack_3bone_pred_prob(bm_a, probs_a, img_c.shape)
+    prob_out = from_canonical_oai(prob_c, layout)
     fp_c = _vol_fingerprint_oai(img_c)
     while len(_OAI_BONE_AUX_CACHE) >= 16:
         _OAI_BONE_AUX_CACHE.pop(next(iter(_OAI_BONE_AUX_CACHE)), None)
-    _OAI_BONE_AUX_CACHE[fp_c] = {'bm_raw': bm_a}
-
-    pred_c, prob_c = _pack_3bone_pred_prob(bm_a, probs_a, img_c.shape)
-    return from_canonical_oai(pred_c, layout), from_canonical_oai(prob_c, layout)
+    _OAI_BONE_AUX_CACHE[fp_c] = {
+        'bm_raw': bm_a,
+        'prob_p1_fp': _vol_fingerprint_oai(prob_out),
+    }
+    return from_canonical_oai(pred_c, layout), prob_out
 
 
 def predict_oai_bone_p2(
@@ -940,10 +946,23 @@ def predict_oai_bone_p2(
     sp_c = (1.0, 1.0, 1.0) if layout != 'native' else tuple(float(s) for s in (spacing or (1.0, 1.0, 1.0)))
     fp_c = _vol_fingerprint_oai(img_c)
 
+    cached_aux = _OAI_BONE_AUX_CACHE.get(fp_c)
+    has_valid_prob_map = (
+        prob_map is not None
+        and prob_map.ndim == 4
+        and prob_map.shape[3] >= 4
+        and np.any(prob_map[..., 1:4] > 0.2)
+    )
+    prob_matches_cache = (
+        isinstance(cached_aux, dict)
+        and 'bm_raw' in cached_aux
+        and (prob_map is None or _vol_fingerprint_oai(prob_map) == cached_aux.get('prob_p1_fp'))
+    )
+
     bm_a = None
-    if fp_c in _OAI_BONE_AUX_CACHE and 'bm_raw' in _OAI_BONE_AUX_CACHE[fp_c]:
-        bm_a = _OAI_BONE_AUX_CACHE[fp_c]['bm_raw']
-    elif prob_map is not None and prob_map.ndim == 4 and prob_map.shape[3] >= 4:
+    if prob_matches_cache:
+        bm_a = cached_aux['bm_raw']
+    elif has_valid_prob_map:
         pm_c = to_canonical_oai(prob_map, layout=layout)
         pf, pt, pp = pm_c[..., 1], pm_c[..., 2], pm_c[..., 3]
         bm_a = {
@@ -951,6 +970,8 @@ def predict_oai_bone_p2(
             'tibia': postprocess_3bone_mask((pt >= 0.45) & (pt > pf) & (pt >= pp), sp_c, bone_name='tibia').astype(np.uint8),
             'patella': postprocess_3bone_mask((pp >= 0.38) & (pp > pf) & (pp > pt), sp_c, bone_name='patella').astype(np.uint8),
         }
+    elif isinstance(cached_aux, dict) and 'bm_raw' in cached_aux:
+        bm_a = cached_aux['bm_raw']
     elif p1_dict is not None:
         predict_oai_bone_p1(img, spacing, p1_dict)
         bm_a = _OAI_BONE_AUX_CACHE[fp_c]['bm_raw']
@@ -2429,15 +2450,23 @@ def predict_unified_bone_p2(img, prob_map, spacing, model_dict, ski10_clf_helper
     """Unified SKI10+OAI Pass-2 Subchondral Surface Refiner Bone inference."""
     if _is_oai_domain(img, spacing):
         ref_v2_d = model_dict['oai_p2'].get('ref_v2') or model_dict['oai_p2']['models']
+        p1_d = model_dict.get('oai_p1')
+        if p1_d is None and ski10_clf_helper is not None and getattr(ski10_clf_helper, 'model_dir', None):
+            p1_path = os.path.join(ski10_clf_helper.model_dir, 'bone_rf_p1.joblib')
+            if os.path.exists(p1_path):
+                p1_loaded = joblib.load(p1_path)
+                if isinstance(p1_loaded, dict):
+                    p1_d = p1_loaded.get('oai_p1', p1_loaded)
         return predict_oai_bone_p2(
             img, prob_map, spacing, ref_v2_d,
-            p1_dict=model_dict.get('oai_p1'),
+            p1_dict=p1_d,
             joint_bone_atlases=model_dict.get('joint_bone_atlases_208'),
             joint_bone_models=model_dict.get('joint_bone_models_208'),
         )
     from .bone_rf import BoneClassifier
     helper = BoneClassifier()
     helper.stage = 'v2_p2'
+    helper.model_dir = getattr(ski10_clf_helper, 'model_dir', None) if ski10_clf_helper is not None else None
     ski10_meta = dict(model_dict['ski10_p2'])
     if 'joint_bone_models_208' in model_dict and 'ref_v2' in ski10_meta:
         jb_models = model_dict['joint_bone_models_208']
@@ -2449,7 +2478,7 @@ def predict_unified_bone_p2(img, prob_map, spacing, model_dict, ski10_clf_helper
             ref_v2_u['tibia']['joint_alpha'] = 0.02
         ski10_meta['ref_v2'] = ref_v2_u
     helper.meta = ski10_meta
-    helper._tierA_cached = ski10_meta['tierA']
+    helper._tierA_cached = ski10_meta.get('tierA')
     helper._ref_v2_cached = None
     return helper._predict_v2_refiner(img, spacing, prob_map=prob_map)
 

@@ -587,7 +587,7 @@ class CartilageClassifier:
             pre = _precompute_volume_maps(img, b_m, dts, sp, lbl=lbl)
             return img, b_m, lbl, sp, dts, pre
 
-        prepped = Parallel(n_jobs=min(16, max(1, len(images))), prefer='threads')(
+        prepped = Parallel(n_jobs=min(16, os.cpu_count() or 4, max(1, len(images))), prefer='threads')(
             delayed(_prep_case)(i) for i in range(len(images))
         )
 
@@ -631,7 +631,7 @@ class CartilageClassifier:
                 n_nt = min(len(neg_tib), max(1, int(2.1 * max(n_t, 1000))))
                 n_nf = min(len(neg_fem), max(1, int(2.2 * max(n_f, 1000))))
                 idx_nt = neg_tib[rng.choice(len(neg_tib), n_nt, replace=False)] if n_nt > 0 else neg_tib
-                idx_nf = neg_fem[rng.choice(len(neg_fem), n_nf, replace=False)] if n_nf > 0 else neg_fem
+                idx_nf = neg_fem[rng.choice(len(neg_fem), n_nf, replace=False)] if n_nf > 0 else neg_nf
                 arrs = [idx_f, idx_t, idx_nt, idx_nf]
 
             sample_mask = np.zeros_like(roi, dtype=bool)
@@ -651,13 +651,13 @@ class CartilageClassifier:
         if prob_maps is None:
             # --- PASS 1: Global + Tibial Specialist + 2-Fold Out-of-Fold Probabilities ---
             self.stage = 1
-            sampled_g = Parallel(n_jobs=min(16, max(1, len(prepped))), prefer='threads')(
+            sampled_g = Parallel(n_jobs=min(16, os.cpu_count() or 4, max(1, len(prepped))), prefer='threads')(
                 delayed(_sample_case)(i, None, False, 0) for i in range(len(prepped))
             )
             X_g = np.vstack([s[0] for s in sampled_g])
             y_g = np.concatenate([s[1] for s in sampled_g])
 
-            sampled_t = Parallel(n_jobs=min(16, max(1, len(prepped))), prefer='threads')(
+            sampled_t = Parallel(n_jobs=min(16, os.cpu_count() or 4, max(1, len(prepped))), prefer='threads')(
                 delayed(_sample_case)(i, None, True, 500) for i in range(len(prepped))
             )
             X_t = np.vstack([s[0] for s in sampled_t])
@@ -718,18 +718,20 @@ class CartilageClassifier:
                         df, dt = dts['femur'], dts['tibia']
                         pv[df > 5.5, 1] = 0.0
                         pv[dt > 5.5, 2] = 0.0
+                        while len(_SESSION_OOF_PROB_CACHE) >= 128:
+                            _SESSION_OOF_PROB_CACHE.pop(next(iter(_SESSION_OOF_PROB_CACHE)), None)
                         _SESSION_OOF_PROB_CACHE[_vol_fingerprint(img)] = pv
         else:
             # --- PASS 2: Auto-Context Global + Tibial Specialist ---
             self.stage = 2
             _SESSION_OOF_PROB_CACHE.clear()
-            sampled_g = Parallel(n_jobs=min(16, max(1, len(prepped))), prefer='threads')(
+            sampled_g = Parallel(n_jobs=min(16, os.cpu_count() or 4, max(1, len(prepped))), prefer='threads')(
                 delayed(_sample_case)(i, prob_maps[i], False, 100) for i in range(len(prepped))
             )
             X_g = np.vstack([s[0] for s in sampled_g])
             y_g = np.concatenate([s[1] for s in sampled_g])
 
-            sampled_t = Parallel(n_jobs=min(16, max(1, len(prepped))), prefer='threads')(
+            sampled_t = Parallel(n_jobs=min(16, os.cpu_count() or 4, max(1, len(prepped))), prefer='threads')(
                 delayed(_sample_case)(i, prob_maps[i], True, 700) for i in range(len(prepped))
             )
             X_t = np.vstack([s[0] for s in sampled_t])

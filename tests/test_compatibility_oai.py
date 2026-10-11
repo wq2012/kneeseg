@@ -166,6 +166,7 @@ class TestOAICompatibility(unittest.TestCase):
 
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         pkg_dir = os.path.join(base_dir, 'kneeseg')
+        forbidden_prefix = '/usr/local/' + 'google/home/quanw'
         for root, _, files in os.walk(pkg_dir):
             for fname in files:
                 if not fname.endswith('.py'):
@@ -177,7 +178,18 @@ class TestOAICompatibility(unittest.TestCase):
                 self.assertNotIn('experiments/cache', src, f"Found cache lookup in {rel_path}")
                 self.assertNotIn("os.path.join(base_dir, 'experiments', 'cache')", src, f"Found cache lookup in {rel_path}")
                 self.assertNotIn('sys.path.insert', src, f"Found sys.path.insert in {rel_path}")
-                self.assertNotIn('/usr/local/google/home/quanw', src, f"Found hardcoded user path in {rel_path}")
+                self.assertNotIn(forbidden_prefix, src, f"Found hardcoded user path in {rel_path}")
+
+        exp_dir = os.path.join(base_dir, 'experiments')
+        if os.path.isdir(exp_dir):
+            for fname in os.listdir(exp_dir):
+                if not fname.endswith('.py'):
+                    continue
+                full_path = os.path.join(exp_dir, fname)
+                rel_path = os.path.relpath(full_path, base_dir)
+                with open(full_path, 'r', encoding='utf-8') as f:
+                    src = f.read()
+                self.assertNotIn(forbidden_prefix, src, f"Found hardcoded user path in {rel_path}")
 
     def test_legacy_v1_raw_rf_checkpoint_backward_compatibility(self):
         import os
@@ -384,6 +396,327 @@ class TestOAICompatibility(unittest.TestCase):
         np.testing.assert_allclose(blended['pf_fml_fc'], 0.30, atol=1e-6)
         np.testing.assert_allclose(blended['pt_ml_tc'], 0.50, atol=1e-6)
         np.testing.assert_allclose(blended['pp_ml_pc'], 0.80, atol=1e-6)
+
+    def test_synthetic_subchondral_atlas_and_unified_pipeline(self):
+        """Self-contained CI test for v2/v6/oai/unified stages using tiny in-memory synthetic models."""
+        from sklearn.ensemble import ExtraTreesClassifier
+        from sklearn.linear_model import Ridge
+        from sklearn.preprocessing import StandardScaler
+        from kneeseg.bone_rf import _BONE_OOF_PROB_CACHE, _BONE_V2_SESSION_CACHE
+        from kneeseg.cartilage_v6 import _CART_P1_SESSION_CACHE
+        from kneeseg.oai_subchondral_atlas import _OAI_BONE_AUX_CACHE, _OAI_CART_P1_CACHE
+
+        rng = np.random.RandomState(7)
+
+        class _FlexExtraTreesClassifier(ExtraTreesClassifier):
+            def predict_proba(self, X):
+                X = np.asarray(X, dtype=np.float32)
+                nf = self.n_features_in_
+                if X.shape[1] > nf:
+                    X = X[:, :nf]
+                elif X.shape[1] < nf:
+                    X = np.pad(X, ((0, 0), (0, nf - X.shape[1])))
+                return super().predict_proba(X)
+
+        def _tiny_et(n_feat, n_cls):
+            X = rng.randn(max(n_cls * 2, 8), n_feat).astype(np.float32)
+            y = np.arange(len(X)) % n_cls
+            return _FlexExtraTreesClassifier(n_estimators=2, max_depth=2, random_state=7, n_jobs=1).fit(X, y)
+
+        # 1. Build synthetic SKI10 v2_p1 & v2_p2 bone models
+        atl_a_ski = (
+            np.full(20480, 0.3, dtype=np.float32),
+            np.full(20480, 0.3, dtype=np.float32),
+            np.full(30720, 0.3, dtype=np.float32),
+            np.full(30720, 0.3, dtype=np.float32),
+            np.full(20480, 0.3, dtype=np.float32),
+            np.full(20480, 0.3, dtype=np.float32),
+        )
+        c139 = _tiny_et(139, 3)
+        c142 = _tiny_et(142, 3)
+        ski_b1_meta = {
+            'clf': c142,
+            'stage': 'v2_p1',
+            'tierA': {
+                'atl_full': atl_a_ski,
+                'hgb_init_1': c139,
+                'hgb_init_2': c139,
+                'hgb_1': c142,
+                'hgb_2': c142,
+            },
+        }
+        p_full_bone = (
+            np.full((24, 32, 24), 0.3, dtype=np.float32),
+            np.full((28, 32, 24), 0.3, dtype=np.float32),
+        )
+        c108 = _tiny_et(108, 2)
+        c156 = _tiny_et(156, 2)
+        ref_b_ski = {
+            'et_v1': c108,
+            'hgb_v2_1': c156,
+            'hgb_v2_2': c156,
+            'et_v2': c156,
+            'p_full': p_full_bone,
+        }
+        ski_b2_meta = {
+            'clf': c142,
+            'stage': 'v2_p2',
+            'tierA': ski_b1_meta['tierA'],
+            'ref_v2': {'femur': dict(ref_b_ski), 'tibia': dict(ref_b_ski)},
+        }
+
+        img_ski = np.zeros((32, 36, 36), dtype=np.float32)
+        img_ski[6:26, 5:17, 8:28] = 150.0
+        img_ski[6:26, 19:31, 8:28] = 160.0
+        sp_ski = (1.5, 1.0, 1.0)
+
+        b1_ski = BoneClassifier()
+        b1_ski.stage = 'v2_p1'
+        b1_ski.meta = ski_b1_meta
+        b2_ski = BoneClassifier()
+        b2_ski.stage = 'v2_p2'
+        b2_ski.meta = ski_b2_meta
+
+        _BONE_V2_SESSION_CACHE.clear()
+        _BONE_OOF_PROB_CACHE.clear()
+        pred_b1, prob_b1 = b1_ski.predict(img_ski, spacing=sp_ski)
+        self.assertEqual(pred_b1.shape, img_ski.shape)
+        self.assertEqual(prob_b1.shape, (*img_ski.shape, 3))
+
+        # Test custom prob_map override in Pass 2 + continuous probabilities
+        custom_prob = np.zeros_like(prob_b1)
+        custom_prob[..., 0] = 1.0
+        custom_prob[6:26, 5:17, 8:28, 0] = 0.05
+        custom_prob[6:26, 5:17, 8:28, 1] = 0.90
+        custom_prob[6:26, 19:31, 8:28, 0] = 0.05
+        custom_prob[6:26, 19:31, 8:28, 2] = 0.90
+        pred_b2, prob_b2 = b2_ski.predict(img_ski, prob_map=custom_prob, spacing=sp_ski)
+        self.assertEqual(pred_b2.shape, img_ski.shape)
+        self.assertEqual(prob_b2.shape, (*img_ski.shape, 3))
+        self.assertTrue(np.any((prob_b2 > 0.01) & (prob_b2 < 0.99)))
+
+        # 2. Build synthetic SKI10 v6_p1 & v6_p2 cartilage models
+        ap_oai = {
+            'pt_old_tc': np.full((26, 26, 16, 18), 0.35, dtype=np.float32),
+            'pt_old_fc': np.full((26, 26, 16, 18), 0.15, dtype=np.float32),
+            'pt_ml_tc': np.full((34, 26, 16, 18), 0.35, dtype=np.float32),
+            'pt_ml_fc': np.full((34, 26, 16, 18), 0.15, dtype=np.float32),
+            'pt_mly_tc': np.full((34, 18, 26, 16), 0.35, dtype=np.float32),
+            'pt_sep_tc': np.full((2, 24, 24, 16, 18), 0.35, dtype=np.float32),
+            'pt_sep_fc': np.full((2, 24, 24, 16, 18), 0.15, dtype=np.float32),
+            'pt_wide_tc': np.full((32, 28, 16, 18), 0.35, dtype=np.float32),
+            'p2d_ml_tc': np.full((34, 26), 0.35, dtype=np.float32),
+            'edt_ml_2d': np.full((34, 26), 1.5, dtype=np.float32),
+            'p2d_sep_tc': np.full((2, 24, 24), 0.35, dtype=np.float32),
+            'edt_sep_2d': np.full((2, 24, 24), 1.5, dtype=np.float32),
+            'p2d_wide_tc': np.full((32, 28), 0.35, dtype=np.float32),
+            'edt_wide_2d': np.full((32, 28), 1.5, dtype=np.float32),
+            'pf_old_fc': np.full((22, 26, 26, 16), 0.35, dtype=np.float32),
+            'pf_old_tc': np.full((22, 26, 26, 16), 0.15, dtype=np.float32),
+            'pf_old_pc': np.full((22, 26, 26, 16), 0.10, dtype=np.float32),
+            'pf_fml_fc': np.full((34, 26, 26, 16), 0.35, dtype=np.float32),
+            'pf_fml_tc': np.full((34, 26, 26, 16), 0.15, dtype=np.float32),
+            'pf_fml_pc': np.full((34, 26, 26, 16), 0.10, dtype=np.float32),
+            'pf_sep_fc': np.full((2, 22, 26, 26, 16), 0.35, dtype=np.float32),
+            'pf_sep_tc': np.full((2, 22, 26, 26, 16), 0.15, dtype=np.float32),
+            'pf_sep_pc': np.full((2, 22, 26, 26, 16), 0.10, dtype=np.float32),
+            'p3d_fml_fc': np.full((34, 26, 26), 0.35, dtype=np.float32),
+            'edf_fml_3d': np.full((34, 26, 26), 1.5, dtype=np.float32),
+            'pp_old_pc': np.full((20, 24, 16, 18), 0.35, dtype=np.float32),
+            'pp_old_fc': np.full((20, 24, 16, 18), 0.15, dtype=np.float32),
+            'pp_ml_pc': np.full((28, 24, 16, 18), 0.35, dtype=np.float32),
+            'pp_ml_fc': np.full((28, 24, 16, 18), 0.15, dtype=np.float32),
+            'pp_sep_pc': np.full((2, 18, 24, 16, 18), 0.35, dtype=np.float32),
+            'pp_sep_fc': np.full((2, 18, 24, 16, 18), 0.15, dtype=np.float32),
+            'p2d_pml_pc': np.full((28, 24), 0.35, dtype=np.float32),
+            'edp_pml_2d': np.full((28, 24), 1.5, dtype=np.float32),
+        }
+        c213 = _tiny_et(213, 4)
+        c261 = _tiny_et(261, 4)
+        c233 = _tiny_et(233, 4)
+        c285 = _tiny_et(285, 4)
+        c127 = _tiny_et(127, 2)
+        c137 = _tiny_et(137, 2)
+        c151 = _tiny_et(151, 2)
+        c167 = _tiny_et(167, 2)
+        c103 = _tiny_et(103, 2)
+
+        th_cols = [2, 4, 7, 12, 14, 17, 18, 22, 38, 39]
+        bp_cols = [1, 4, 7, 20, 21, 24, 25, 28, 29]
+        sc_th = StandardScaler().fit(rng.randn(8, len(th_cols)))
+        sc_bp = StandardScaler().fit(rng.randn(8, len(bp_cols)))
+        m_th = Ridge().fit(rng.randn(8, len(th_cols)), np.zeros(8))
+        m_bp = Ridge().fit(rng.randn(8, len(bp_cols)), np.zeros(8))
+
+        m_v6_ski = {
+            'atlas_priors': ap_oai,
+            'p1_folds': {'tibia': [c213] * 4, 'femur': [c213] * 4},
+            'p2_tibia_hgb': [c261] * 3,
+            'p2_femur_hgb': [c261] * 3,
+            'p2_tibia_et': c261,
+            'p2_femur_et': c261,
+            'p2_tibia_oof_folds': [[c261]] * 4,
+        }
+        ski_c1_meta = {
+            'clf': c213,
+            'clf_tib_spec': c213,
+            'atlas_priors': ap_oai,
+            'stage': 'v6_p1',
+            'p1_folds': {'tibia': [c213] * 4, 'femur': [c213] * 4},
+        }
+        ski_c2_meta = {
+            'clf': c261,
+            'clf_tib_spec': c261,
+            'atlas_priors': ap_oai,
+            'stage': 'v6_p2',
+            'm_v6': m_v6_ski,
+            'm_v5': m_v6_ski,
+            'm_v7': {
+                'p1_folds_v7': [c233] * 4,
+                'p2_tibia_hgb': [c285] * 6,
+                'p2_tibia_et': c285,
+                'p2_tibia_oof_folds': [(None, None, None, None, None, c285)] * 4,
+            },
+            's3_clean': {'s3_models_folds': [{'d1': c127, 'cd1': c137}] * 4},
+            'f3_models': {'models_g': [c151] * 4, 'models_c': [c167] * 4},
+            'pure_models': [c103] * 4,
+            'calib_model': {
+                'th_cols': th_cols, 'bp_cols': bp_cols,
+                'sc_th': sc_th, 'sc_bp': sc_bp, 'm_th': m_th, 'm_bp': m_bp,
+                'th_base': 0.508, 's_th': 1.65, 's_bp': 1.60, 'ptb_0': 0.12,
+            },
+        }
+        bm_ski = {
+            'femur': (img_ski == 150.0).astype(np.uint8),
+            'tibia': (img_ski == 160.0).astype(np.uint8),
+        }
+        c1_ski = CartilageClassifier()
+        c1_ski.stage = 'v6_p1'
+        c1_ski.atlas_priors = ap_oai
+        c1_ski.meta = ski_c1_meta
+        c2_ski = CartilageClassifier()
+        c2_ski.stage = 'v6_p2'
+        c2_ski.atlas_priors = ap_oai
+        c2_ski.meta = ski_c2_meta
+
+        _CART_P1_SESSION_CACHE.clear()
+        cp1_ski = c1_ski.predict_proba_map(img_ski, bm_ski, spacing=sp_ski)
+        self.assertEqual(cp1_ski.shape, (*img_ski.shape, 3))
+        yc2_ski, cp2_ski = c2_ski.predict(img_ski, bm_ski, prob_map=cp1_ski, spacing=sp_ski)
+        self.assertEqual(yc2_ski.shape, img_ski.shape)
+        self.assertEqual(cp2_ski.shape, (*img_ski.shape, 3))
+
+        # 3. Build synthetic OAI oai_p1, oai_p2, oai_v6_p1, oai_v6_p2 models
+        c130 = _tiny_et(130, 4)
+        c151_4 = _tiny_et(151, 4)
+        c109 = _tiny_et(109, 2)
+        c158 = _tiny_et(158, 2)
+        c403 = _tiny_et(403, 4)
+        c566 = _tiny_et(566, 4)
+        c101 = _tiny_et(101, 2)
+
+        oai_b1_meta = {
+            'format_version': 'oai_3bone_v2',
+            'p0_models': [c130, c130],
+            'atl_0_full': [np.full(20480, 0.3, dtype=np.float32)] * 3,
+            'tierA_models': [c151_4, c151_4],
+            'atl_A_full': tuple(
+                [np.full(20480, 0.3, dtype=np.float32)] * 3
+                + [np.full(30720, 0.3, dtype=np.float32)] * 3
+                + [np.full(20480, 0.3, dtype=np.float32)] * 3
+            ),
+            'pat_models': [c109, c109],
+            'pat_atl_full': (
+                np.full((28, 28, 28), 0.3, dtype=np.float32),
+                np.full((24, 28, 24), 0.3, dtype=np.float32),
+            ),
+        }
+        ref_b_oai = {
+            'et_v1': c108,
+            'hgb_whole_1': c158, 'hgb_whole_2': c158, 'et_whole': c158,
+            'hgb_sub_1': c158, 'hgb_sub_2': c158, 'et_sub': c158,
+            'p_full': p_full_bone,
+        }
+        oai_b2_meta = {
+            'format_version': 'oai_3bone_refiner_v2',
+            'models': {'femur': dict(ref_b_oai), 'tibia': dict(ref_b_oai), 'patella': dict(ref_b_oai)},
+        }
+        oai_c1_meta = {
+            'format_version': 'oai_cartilage_v6_p1',
+            'p1_folds': {'femur': [c403] * 4, 'tibia': [c403] * 4, 'patella': [c403] * 4},
+            'atlas_priors': ap_oai,
+        }
+        oai_c2_meta = {
+            'format_version': 'oai_cartilage_v6_p2',
+            'm_v6': {
+                'atlas_priors': ap_oai,
+                'p1_folds': oai_c1_meta['p1_folds'],
+                'p2_femur_hgb': [c566, c566], 'p2_femur_et': c566,
+                'p2_tibia_hgb': [c566, c566], 'p2_tibia_et': c566,
+                'p2_patella_hgb': [c566, c566], 'p2_patella_et': c566,
+            },
+            's3_models': {'femur': [c101] * 3, 'tibia': [c101] * 3, 'patella': [c101] * 3},
+            'params': {'w_s3_f': 0.42, 'w_s3_t': 0.44, 'w_s3_p': 0.44, 'th_f': 0.49, 'th_t': 0.48, 'th_p': 0.48},
+        }
+
+        # 4. Build Unified models and run on both OAI and SKI10 domains
+        uni_b1 = BoneClassifier()
+        uni_b1.stage = 'unified_p1'
+        uni_b1.meta = {
+            'format_version': 'unified_ski10_oai_bone_p1',
+            'ski10_p1': ski_b1_meta, 'oai_p1': oai_b1_meta,
+            'joint_bone_atlases_208': {'femur': p_full_bone, 'tibia': p_full_bone},
+        }
+        uni_b2 = BoneClassifier()
+        uni_b2.stage = 'unified_p2'
+        uni_b2.meta = {
+            'format_version': 'unified_ski10_oai_bone_p2',
+            'ski10_p2': ski_b2_meta, 'oai_p2': oai_b2_meta, 'oai_p1': oai_b1_meta,
+            'joint_bone_atlases_208': {'femur': p_full_bone, 'tibia': p_full_bone},
+            'joint_bone_models_208': {'femur': c108, 'tibia': c108},
+        }
+        uni_c1 = CartilageClassifier()
+        uni_c1.stage = 'unified_v6_p1'
+        uni_c1.atlas_priors = {'unified': True}
+        uni_c1.meta = {
+            'format_version': 'unified_ski10_oai_cart_p1',
+            'ski10_p1': ski_c1_meta, 'oai_p1': oai_c1_meta,
+            'joint_atlas_priors_208': ap_oai,
+        }
+        uni_c2 = CartilageClassifier()
+        uni_c2.stage = 'unified_v6_p2'
+        uni_c2.atlas_priors = {'unified': True}
+        uni_c2.meta = {
+            'format_version': 'unified_ski10_oai_cart_p2',
+            'ski10_p2': ski_c2_meta, 'oai_p2': oai_c2_meta,
+            'joint_atlas_priors_208': ap_oai,
+        }
+
+        img_oai = np.zeros((32, 36, 36), dtype=np.float32)
+        img_oai[6:26, 6:18, 6:18] = 150.0
+        img_oai[6:26, 20:32, 6:18] = 160.0
+        img_oai[10:22, 14:26, 22:32] = 170.0
+        sp_oai = (1.5, 1.5, 1.5)
+
+        _OAI_BONE_AUX_CACHE.clear()
+        _OAI_CART_P1_CACHE.clear()
+        ub1_pred, ub1_prob = uni_b1.predict(img_oai, spacing=sp_oai)
+        self.assertEqual(ub1_pred.shape, img_oai.shape)
+        self.assertEqual(ub1_prob.shape, (*img_oai.shape, 4))
+        ub2_pred, ub2_prob = uni_b2.predict(img_oai, prob_map=ub1_prob, spacing=sp_oai)
+        self.assertEqual(ub2_pred.shape, img_oai.shape)
+        self.assertEqual(ub2_prob.shape, (*img_oai.shape, 4))
+
+        bm_oai = {
+            'femur': (img_oai == 160.0).astype(np.uint8),
+            'tibia': (img_oai == 150.0).astype(np.uint8),
+            'patella': (img_oai == 170.0).astype(np.uint8),
+        }
+        uc1_prob = uni_c1.predict_proba_map(img_oai, bm_oai, spacing=sp_oai)
+        self.assertEqual(uc1_prob.shape, (*img_oai.shape, 7))
+        uc2_pred, uc2_prob = uni_c2.predict(img_oai, bm_oai, prob_map=uc1_prob, spacing=sp_oai)
+        self.assertEqual(uc2_pred.shape, img_oai.shape)
+        self.assertEqual(uc2_prob.shape, (*img_oai.shape, 7))
 
 
 if __name__ == '__main__':

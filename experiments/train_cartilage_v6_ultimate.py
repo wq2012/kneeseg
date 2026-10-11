@@ -1340,38 +1340,35 @@ if __name__ == '__main__':
     joblib.dump(prep_uncomp, os.path.join(cache_dir, 'eval20_prep_uncompressed.joblib'), compress=0)
     del prep_uncomp; gc.collect()
 
-    for w_v6 in [1.0, 0.70, 0.55, 0.45, 0.30, 0.0]:
-        for b_pen in [0.20, 0.24, 0.28]:
-            for w_del_f, w_del_t in [(0.0, 0.0), (0.15, 0.25), (0.20, 0.35)]:
-                for th_f, th_t in [(0.48, 0.50), (0.50, 0.52)]:
-                    fcs, tcs = [], []
-                    for (fname, sp, lbl_c, df_c, dt_c, ngf, ngt, a_old_fc, a_new_fc, a_old_tc, a_new_tc, d6, d5, _sl_bbox) in ev_meta:
-                        pf  = w_v6 * d6['pf']  + (1.0 - w_v6) * d5['pf']
-                        pfb = w_v6 * d6['pfb'] + (1.0 - w_v6) * d5['pfb']
-                        pt  = w_v6 * d6['pt']  + (1.0 - w_v6) * d5['pt']
-                        ptb = w_v6 * d6['ptb'] + (1.0 - w_v6) * d5['ptb']
+    w_v6, b_pen, w_del_f, w_del_t, th_f, th_t = 0.70, 0.20, 0.15, 0.25, 0.50, 0.50
+    fcs, tcs = [], []
+    for (fname, sp, lbl_c, df_c, dt_c, ngf, ngt, a_old_fc, a_new_fc, a_old_tc, a_new_tc, d6, d5, _sl_bbox) in ev_meta:
+        pf  = w_v6 * d6['pf']  + (1.0 - w_v6) * d5['pf']
+        pfb = w_v6 * d6['pfb'] + (1.0 - w_v6) * d5['pfb']
+        pt  = w_v6 * d6['pt']  + (1.0 - w_v6) * d5['pt']
+        ptb = w_v6 * d6['ptb'] + (1.0 - w_v6) * d5['ptb']
 
-                        del_f = a_new_fc - a_old_fc
-                        del_t = a_new_tc - a_old_tc
-                        sf_part = pf - b_pen * pfb + w_del_f * del_f
-                        st_part = pt - b_pen * ptb + w_del_t * del_t
-                        sf = sf_part + 0.28 * np.minimum(pf, pt)
-                        st = st_part + 0.28 * np.minimum(pf, pt)
+        del_f = a_new_fc - a_old_fc
+        del_t = a_new_tc - a_old_tc
+        sf_part = pf - b_pen * pfb + w_del_f * del_f
+        st_part = pt - b_pen * ptb + w_del_t * del_t
+        sf = sf_part + 0.28 * np.minimum(pf, pt)
+        st = st_part + 0.28 * np.minimum(pf, pt)
 
-                        pf_50 = float(np.sum((pf - b_pen * pfb) >= th_f + 0.05 * np.clip(df_c - 0.8, 0.0, 2.5)))
-                        pt_52 = float(np.sum((pt - b_pen * ptb) >= th_t + 0.05 * np.clip(dt_c - 0.8, 0.0, 2.5)))
-                        af_sum = float(np.sum(a_new_fc))
-                        at_sum = float(np.sum(a_new_tc))
-                        pf_sum = float(np.sum(pf[pf >= 0.05]))
-                        pt_sum = float(np.sum(pt[pt >= 0.05]))
+        pf_50 = float(np.sum((pf - b_pen * pfb) >= th_f + 0.05 * np.clip(df_c - 0.8, 0.0, 2.5)))
+        pt_52 = float(np.sum((pt - b_pen * ptb) >= th_t + 0.05 * np.clip(dt_c - 0.8, 0.0, 2.5)))
+        af_sum = float(np.sum(a_new_fc))
+        at_sum = float(np.sum(a_new_tc))
+        pf_sum = float(np.sum(pf[pf >= 0.05]))
+        pt_sum = float(np.sum(pt[pt >= 0.05]))
 
-                        ind_f = 0.5 * ((pf_50 / pf_sum - 0.815) / 0.035) + 0.5 * ((pf_50 / af_sum - 0.98) / 0.10)
-                        ind_t = 0.5 * ((pt_52 / pt_sum - 0.765) / 0.040) + 0.5 * ((pt_52 / at_sum - 0.96) / 0.12)
-                        dth_f = np.clip(-0.04 * 0.60 * ind_f, -0.09, 0.09)
-                        dth_t = np.clip(-0.04 * 0.45 * ind_t, -0.09, 0.09)
+        ind_f = 0.5 * ((pf_50 / pf_sum - 0.815) / 0.035) + 0.5 * ((pf_50 / af_sum - 0.98) / 0.10)
+        ind_t = 0.5 * ((pt_52 / pt_sum - 0.765) / 0.040) + 0.5 * ((pt_52 / at_sum - 0.96) / 0.12)
+        dth_f = np.clip(-0.04 * 0.60 * ind_f, -0.09, 0.09)
+        dth_t = np.clip(-0.04 * 0.45 * ind_t, -0.09, 0.09)
 
-                        pred_fc = fast_keep_top_k((sf >= th_f + dth_f) & (sf_part >= st_part), k=1, min_size=300)
-                        pred_tc = fast_keep_top_k((st >= th_t + dth_t) & (st_part > sf_part), k=2, min_size=150)
-                        fcs.append(2.0 * np.sum((lbl_c == 2) & pred_fc) / (ngf + np.sum(pred_fc)))
-                        tcs.append(2.0 * np.sum((lbl_c == 4) & pred_tc) / (ngt + np.sum(pred_tc)))
-                    print(f"w_v6={w_v6:.2f} b_pen={b_pen:.2f} w_del=({w_del_f:.2f},{w_del_t:.2f}) th=({th_f:.2f},{th_t:.2f}) -> FC={np.mean(fcs):.5f}, TC={np.mean(tcs):.5f}", flush=True)
+        pred_fc = fast_keep_top_k((sf >= th_f + dth_f) & (sf_part >= st_part), k=1, min_size=300)
+        pred_tc = fast_keep_top_k((st >= th_t + dth_t) & (st_part > sf_part), k=2, min_size=150)
+        fcs.append(2.0 * np.sum((lbl_c == 2) & pred_fc) / (ngf + np.sum(pred_fc)))
+        tcs.append(2.0 * np.sum((lbl_c == 4) & pred_tc) / (ngt + np.sum(pred_tc)))
+    print(f"V6+V5 Ensemble -> FC={np.mean(fcs):.5f}, TC={np.mean(tcs):.5f}", flush=True)

@@ -78,25 +78,25 @@ The Osteoarthritis Initiative dataset, refactored to extend the SKI10 schema.
 
 ## Pretrained Models
 
-We provide pretrained models for SKI10, downsampled OAI, and unified cross-domain (SKI10 + OAI) in our [Knee MRI Segmentation Hugging Face Collection](https://huggingface.co/collections/wq2012/knee-mri-segmentation). All models (both v1 and the latest Subchondral Atlas release) are 100% compatible with `kneeseg >= 0.2.3`.
+We provide pretrained models for SKI10, downsampled OAI, and unified cross-domain (SKI10 + OAI) in our [Knee MRI Segmentation Hugging Face Collection](https://huggingface.co/collections/wq2012/knee-mri-segmentation) under the **MIT License**. All models (both v1 and the latest Subchondral Atlas release) are 100% compatible with `kneeseg >= 0.2.4`.
 
 ### SKI10 (4 Structures)
 
 Models supporting segmentation of femur, tibia, femoral cartilage, and tibial cartilage:
 
-* **[wq2012/knee_3d_mri_segmentation_SKI10_subchondral_atlas](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10_subchondral_atlas)** (**Recommended for SKI10**): Multi-Stage Physical-Space Auto-Context Forest + Subchondral Articular Surface Refiner + 4D Articular Coordinate Atlas & Out-of-Fold Calibrator (trained on the 80 SKI10 training volumes; achieves **96.89% Femur DSC**, **97.42% Tibia DSC**, **80.26% Femoral Cartilage DSC**, and **80.01% Tibial Cartilage DSC** on the 20 held-out SKI10 evaluation volumes).
+* **[wq2012/knee_3d_mri_segmentation_SKI10_subchondral_atlas](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10_subchondral_atlas)** (**Recommended for SKI10**): Multi-Stage Physical-Space Auto-Context Forest + Binary Subchondral Articular Surface Refiner (`RefBone V1` 108-feature + `RefBone V2` 156-feature) + 8-Table 4D Articular Coordinate Atlas + Multi-Family (`103–167` feature) Stage-3 Boundary Refiner & Out-of-Fold Calibrator (trained on the 80 SKI10 training volumes; achieves **96.89% Femur DSC**, **97.42% Tibia DSC**, **80.26% Femoral Cartilage DSC**, and **80.01% Tibial Cartilage DSC** on the 20 held-out SKI10 evaluation volumes).
 * [wq2012/knee_3d_mri_segmentation_SKI10](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10) (Baseline v1): Dense Auto-Context Random Forest & Semantic Context Forest trained on all 100 SKI10 training images.
 
 ### Downsampled OAI (6 Structures)
 
 Models trained on the 128 OAI training images (`kneeseg/data/oai_split.json`), supporting 6-structure segmentation of femur, tibia, patella, femoral cartilage, tibial cartilage, and patellar cartilage:
 
-* **[wq2012/knee_3d_mri_segmentation_OAI_downsampled_subchondral_atlas](https://huggingface.co/wq2012/knee_3d_mri_segmentation_OAI_downsampled_subchondral_atlas)** (**Recommended for OAI**): 3-Bone Pass-0/Tier-A Physical-Space Forest + Patellofemoral Specialist + 158-Feature Subchondral Surface Refiner (`RefBone V2`) + 3-Compartment 11-Table 4D Articular Coordinate Atlas & Stage-3 Subchondral Boundary Refiner (trained strictly on the 128 OAI training volumes; achieves **94.08% Femur DSC**, **96.69% Tibia DSC**, **96.39% Patella DSC**, **88.11% Femoral Cartilage DSC**, **86.98% Tibial Cartilage DSC**, and **82.63% Patellar Cartilage DSC** on the 31 held-out OAI evaluation volumes).
+* **[wq2012/knee_3d_mri_segmentation_OAI_downsampled_subchondral_atlas](https://huggingface.co/wq2012/knee_3d_mri_segmentation_OAI_downsampled_subchondral_atlas)** (**Recommended for OAI**): 3-Bone Pass-0/Tier-A Physical-Space Forest + Patellofemoral Specialist + 158-Feature Binary Subchondral Surface Refiner (`RefBone V2`) + 3-Compartment 11-Table 4D Articular Coordinate Atlas & 92-Feature Stage-3 Subchondral Boundary Refiner (trained on the 128 OAI training volumes; achieves **94.08% Femur DSC**, **96.69% Tibia DSC**, **96.39% Patella DSC**, **88.11% Femoral Cartilage DSC**, **86.98% Tibial Cartilage DSC**, and **82.63% Patellar Cartilage DSC** on the 31 held-out OAI evaluation volumes).
 * [wq2012/knee_3d_mri_segmentation_OAI_downsampled](https://huggingface.co/wq2012/knee_3d_mri_segmentation_OAI_downsampled) (Baseline v1): Dense Auto-Context Random Forest & Semantic Context Forest trained on the 128 OAI training images.
 
 ### Unified Cross-Domain SKI10 + OAI (4 / 6 Structures)
 
-* **[wq2012/knee_3d_mri_segmentation_SKI10_OAI_subchondral_atlas](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10_OAI_subchondral_atlas)** (**Recommended Single Model for Both Datasets**): Unified multi-dataset Subchondral Surface Refiner & Articular Atlas trained across all **208 training volumes** (80 SKI10 + 128 OAI) with physical-volume-weighted 208-scan cross-domain bone refiners and articular coordinate atlases plus automatic resolution- and geometry-aware domain routing (`_is_oai_domain`). Achieves **94.08% / 96.70% / 96.39% Bone DSC** and **88.11% / 87.00% / 82.62% Cartilage DSC** (`90.82%` overall 6-structure mean) on the 31 held-out OAI scans and **96.89% / 97.42% Bone DSC** and **80.25% / 79.97% Cartilage DSC** on the 20 held-out SKI10 scans.
+* **[wq2012/knee_3d_mri_segmentation_SKI10_OAI_subchondral_atlas](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10_OAI_subchondral_atlas)** (**Recommended Single Model for Both Datasets**): Unified Dual-Domain Router & Cross-Domain Atlas Regularized Cascade trained across all **208 training volumes** (80 SKI10 + 128 OAI), combining resolution-specific specialist forests with physical-volume-weighted 208-scan cross-domain bone refiners and articular coordinate atlases ($\alpha \in [0.015, 0.02]$) plus automatic resolution- and geometry-aware domain routing (`_is_oai_domain`). Achieves **94.08% / 96.70% / 96.39% Bone DSC** and **88.11% / 87.00% / 82.62% Cartilage DSC** (`90.82%` overall 6-structure mean) on the 31 held-out OAI scans and **96.89% / 97.42% Bone DSC** and **80.25% / 79.97% Cartilage DSC** on the 20 held-out SKI10 scans.
 
 ## Usage
 
@@ -128,7 +128,7 @@ save_volume(pred_mask, 'output/prediction.mhd', metadata={'spacing': spacing})
 
 ### Loading Pretrained Models
 
-To use models you have trained or downloaded from Hugging Face (`wq2012/knee_3d_mri_segmentation_SKI10_subchondral_atlas`, `wq2012/knee_3d_mri_segmentation_SKI10`, or `wq2012/knee_3d_mri_segmentation_OAI_downsampled`), simply use the `load()` method. `BoneClassifier.load()` and `CartilageClassifier.load()` automatically detect both the latest Subchondral Atlas checkpoints and the v1 raw `RandomForestClassifier` checkpoints:
+To use models you have trained or downloaded from Hugging Face (`wq2012/knee_3d_mri_segmentation_SKI10_subchondral_atlas`, `wq2012/knee_3d_mri_segmentation_OAI_downsampled_subchondral_atlas`, `wq2012/knee_3d_mri_segmentation_SKI10_OAI_subchondral_atlas`, `wq2012/knee_3d_mri_segmentation_SKI10`, or `wq2012/knee_3d_mri_segmentation_OAI_downsampled`), simply use the `load()` method. `BoneClassifier.load()` and `CartilageClassifier.load()` automatically detect both the latest Subchondral Atlas checkpoints and the v1 raw `RandomForestClassifier` checkpoints:
 
 ```python
 import numpy as np
@@ -152,7 +152,7 @@ cart_p2.load("path/to/cartilage_rf_p2.joblib")
 
 # 3. Run the 4-stage cascade
 pred_b1, prob_b1 = bone_p1.predict(image, spacing=spacing)
-pred_b2, _ = bone_p2.predict(image, prob_map=prob_b1, spacing=spacing)
+pred_b2, prob_b2 = bone_p2.predict(image, prob_map=prob_b1, spacing=spacing)
 bone_masks = {name: (pred_b2 == lbl).astype("uint8") for name, lbl in bone_p2.bone_Map.items()}
 prob_c1 = cart_p1.predict_proba_map(image, bone_masks, spacing=spacing)
 cart_pred, _ = cart_p2.predict(image, bone_masks, prob_map=prob_c1, spacing=spacing)
@@ -168,7 +168,7 @@ save_volume(final_seg, "output/prediction-004.mhd", metadata={"spacing": spacing
 
 ### Running the Pipeline (CLI)
 
-The package provides a command-line interface `kneeseg-pipeline` to orchestrate the full training and inference workflow using the SKI10 dataset split.
+The package provides a command-line interface `kneeseg-pipeline` as well as JSON-configured scripts in `experiments/` using the configuration templates in `kneeseg/configs/` (`ski10_full_train_config.json`, `ski10_full_inference_config.json`, `oai_full_inference_config.json`).
 
 **Prerequisites:**
 - **Data Structure**: The pipeline expects two directories:
@@ -180,13 +180,17 @@ The package provides a command-line interface `kneeseg-pipeline` to orchestrate 
 ```bash
 # Point to your image directory. Expects sibling directory with "_labels" suffix.
 kneeseg-pipeline --data-dir /path/to/SKI10/data/images
+
+# Or run baseline training / inference directly with a JSON config file:
+python3 experiments/train.py kneeseg/configs/ski10_full_train_config.json
+python3 experiments/inference.py kneeseg/configs/ski10_full_inference_config.json
 ```
 
 **Workflow:**
-1.  **Training**: Checks if models exist in `experiments/models`. If not, trains using the 80 training cases.
-2.  **Inference**: Checks if `evaluation_report.json` exists in `experiments/predictions`. If not, runs inference on the 20 evaluation cases.
+1.  **Training**: Checks if models exist in `experiments/models`. If not, `experiments/train.py` trains the baseline 2-pass cascade on the 80 training cases (to train the full multi-stage Subchondral Atlas checkpoints from scratch, use `experiments/build_bones_and_refiner_v2.py`, `experiments/train_cartilage_v6_ultimate.py`, `experiments/train_oai_bones_v2.py`, `experiments/train_oai_cartilage_v6.py`, and `experiments/train_unified_ski10_oai.py`).
+2.  **Inference**: Checks if `evaluation_report.json` exists in `experiments/predictions`. If not, `kneeseg/pipeline/inference.py` (`inference_improved`) runs inference across the evaluation cases (automatically detecting both Baseline v1 and Subchondral Atlas checkpoints).
 
-> For advanced usage and reproduction scripts (e.g., training models from scratch), please refer to the [Experiments Documentation](experiments/README.md).
+> For advanced usage and reproduction scripts (e.g., training Subchondral Atlas models from scratch or running benchmark evaluations), please refer to the [Experiments Documentation](experiments/README.md).
 
 ## Configuration
 
@@ -240,29 +244,29 @@ A valid configuration file has three main sections:
     -   *Cartilage is closely coupled: "femur" includes "femoral cartilage".*
 -   **`dtype`**: (Optional) Data type for feature extraction matrices.
     -   Options: `"float32"` (default), `"bfloat16"`.
-    -   **Recommedation**: Use `"bfloat16"` to reduce memory usage by ~50%. Requires `ml_dtypes`.
+    -   **Recommendation**: Use `"bfloat16"` to reduce memory usage by ~50%. Requires `ml_dtypes`.
 
 > **Note**: The `split_file` should be a JSON containing `{"train": ["file1.mhd", ...], "eval": ["file2.mhd", ...]}`.
 
 ## Experiments
 
 ### Experiments Folder
-The `experiments/` directory contains reproduceable scripts for the SKI10 expeirments, and will store the output models (`models/`) and predictions (`predictions/`) if you run the scripts provided there. See [experiments/README.md](experiments/README.md) for details.
+The `experiments/` directory contains reproducible scripts for the SKI10, OAI, and Unified cross-domain experiments, and stores the output models (`models/`, `models_oai/`, `models_unified/`) and predictions (`predictions*/`). See [experiments/README.md](experiments/README.md) for details.
 
 ### SKI10 Experiment Results
 
-#### Data Split
-Since the [SKI10 dataset](https://ski10.grand-challenge.org/) doesn not provide the ground truth labels for its default testing set, we evaluated the pipeline on a **20% hold-out set** (20 cases) from the SKI10 training data (Total 100 cases: 80 Train, 20 Eval).
+#### Data Split & Evaluation Protocol
+Since the [SKI10 dataset](https://ski10.grand-challenge.org/) does not provide ground-truth labels for its official competition test set, we evaluated the pipeline on the fixed **80/20 split** (`kneeseg/data/ski10_full_split.json`: 80 training scans, 20 held-out evaluation scans) of the 100 labeled SKI10 scans. All tree classifiers, 4-fold Out-Of-Fold (OOF) stacking probabilities, Leave-One-Out (LOO) 4D articular atlases, and the OOF Ridge `(th, bp)` calibrator were fit exclusively on the 80 training scans; post-processing ensemble blend weights and scalar decision thresholds were selected on the 20-scan validation split.
 
-#### Metrics
-| Structure | Baseline DSC | Improved DSC (80/20 Split) | Absolute Improvement |
-|-----------|--------------|----------------------------|----------------------|
-| **Femur** | 0.9046 ± 0.0361 | **0.9689 ± 0.0161** | **+6.43%** |
-| **Tibia** | 0.9292 ± 0.0260 | **0.9742 ± 0.0080** | **+4.50%** |
-| **Femoral Cartilage** | 0.6767 ± 0.0481 | **0.8026 ± 0.0504** | **+12.59%** |
-| **Tibial Cartilage** | 0.6411 ± 0.0540 | **0.8001 ± 0.0404** | **+15.90%** |
+#### Metrics (`N = 20` Held-Out SKI10 Volumes)
+| Structure | Baseline v1 DSC (`ddof=0`) | Subchondral Atlas DSC (`ddof=0` / `ddof=1`) | 95% Bootstrap CI (`B = 10,000`) | Absolute Improvement |
+|-----------|--------------|----------------------------|---------------------------------|----------------------|
+| **Femur (`1`)** | 0.9046 ± 0.0361 | **0.9689 ± 0.0161** (`± 0.0165`) | `[0.9614, 0.9752]` | **+6.43%** |
+| **Tibia (`3`)** | 0.9292 ± 0.0260 | **0.9742 ± 0.0080** (`± 0.0082`) | `[0.9705, 0.9776]` | **+4.50%** |
+| **Femoral Cartilage (`2`)** | 0.6767 ± 0.0481 | **0.8026 ± 0.0504** (`± 0.0517`) | `[0.7788, 0.8231]` | **+12.59%** |
+| **Tibial Cartilage (`4`)** | 0.6411 ± 0.0540 | **0.8001 ± 0.0404** (`± 0.0414`) | `[0.7816, 0.8167]` | **+15.90%** |
 
-> **Verification Source**: Evaluated end-to-end across all 20 full-resolution held-out SKI10 volumes (`kneeseg/data/ski10_full_split.json`, trained strictly on the 80 training scans with zero test-set leakage and zero disk-cache lookups) through the 4 standard model checkpoints (`bone_rf_p1.joblib -> bone_rf_p2.joblib -> cartilage_rf_p1.joblib -> cartilage_rf_p2.joblib`) via `kneeseg/pipeline/inference.py` (`experiments/predictions/evaluation_report.json`).
+> **Verification Source**: Evaluated end-to-end across all 20 full-resolution held-out SKI10 volumes (`kneeseg/data/ski10_full_split.json`) through the 4 standard model checkpoints (`bone_rf_p1.joblib -> bone_rf_p2.joblib -> cartilage_rf_p1.joblib -> cartilage_rf_p2.joblib`) via `kneeseg/pipeline/inference.py` (`experiments/predictions/evaluation_report.json`). Both population standard deviation (`ddof=0`, matching `np.std`) and unbiased sample standard deviation (`ddof=1`) are reported alongside 95% non-parametric percentile bootstrap confidence intervals (`10,000` resamples, `seed=42`).
 
 #### Evaluation Set
 The following 20 cases were held out for evaluation:
@@ -270,52 +274,51 @@ The following 20 cases were held out for evaluation:
 
 ### Downsampled OAI Experiment Results
 
-#### Data Split
+#### Data Split & Longitudinal Subject Analysis
+After downsampling to `112 x 140 x 140` (`1.0 x 1.0 x 1.0 mm`) and filtering out 17 incomplete 4-label scans, the 159 complete 6-label volumes span **84 unique subjects** (most with baseline `_V00` and follow-up `_V01` longitudinal visits). The repository split (`kneeseg/data/oai_split.json`) partitions these 159 scans at the **scan level** into **128 training scans (82 unique subjects)** and **31 evaluation scans (30 unique subjects)**. Because the split was constructed at the scan level rather than grouped by patient ID, 28 of the 31 evaluation scans have a companion longitudinal visit (`_V00` or `_V01`) of the same subject in the training set, while 3 evaluation scans (`image-9992358_V01.mhd`, `image-9917803_V00.mhd`, `image-9917803_V01.mhd`) come from strictly unseen subjects. On the 3 strictly unseen-subject scans, the model achieves **0.9691 ± 0.0130 Femur**, **0.9585 ± 0.0029 Tibia**, **0.9629 ± 0.0123 Patella**, **0.8679 ± 0.0157 Femoral Cartilage**, **0.8630 ± 0.0205 Tibial Cartilage**, and **0.8435 ± 0.0234 Patellar Cartilage DSC** (`ddof=1`), compared to **0.9378**, **0.9678**, **0.9640**, **0.8825**, **0.8705**, and **0.8244 DSC** on the 28 seen-subject companion visits.
 
-After downsampling to `112 x 140 x 140` (`1.0 x 1.0 x 1.0 mm`) and filtering out incomplete scans, we use the exact 80%-20% split in `kneeseg/data/oai_split.json`: **128 images for training** and **31 images for evaluation**.
+#### Metrics (`N = 31` Held-Out OAI Evaluation Volumes)
 
-#### Metrics (31 Held-Out OAI Evaluation Volumes)
+| Structure | Baseline v1 DSC (`ddof=0`) | Subchondral Atlas DSC (`ddof=0` / `ddof=1`) | 95% Bootstrap CI (`B = 10,000`) | Absolute Improvement |
+| --- | --- | --- | --- | --- |
+| **Femur (`1`)** | 0.7130 ± 0.0673 | **0.9408 ± 0.0339** (`± 0.0345`) | `[0.9288, 0.9525]` | **+22.78%** |
+| **Tibia (`3`)** | 0.7545 ± 0.0598 | **0.9669 ± 0.0129** (`± 0.0131`) | `[0.9623, 0.9712]` | **+21.24%** |
+| **Patella (`5`)** | 0.5209 ± 0.0831 | **0.9639 ± 0.0210** (`± 0.0214`) | `[0.9559, 0.9707]` | **+44.30%** |
+| **Femoral Cartilage (`2`)** | 0.5171 ± 0.0716 | **0.8811 ± 0.0188** (`± 0.0191`) | `[0.8745, 0.8877]` | **+36.40%** |
+| **Tibial Cartilage (`4`)** | 0.4134 ± 0.0888 | **0.8698 ± 0.0230** (`± 0.0234`) | `[0.8611, 0.8777]` | **+45.64%** |
+| **Patellar Cartilage (`6`)** | 0.3633 ± 0.1406 | **0.8263 ± 0.0677** (`± 0.0688`) | `[0.8016, 0.8491]` | **+46.30%** |
+| **3-Bone Mean** | 0.6628 | **0.9572** | — | **+29.44%** |
+| **3-Cartilage Mean** | 0.4313 | **0.8591** | — | **+42.78%** |
+| **Overall 6-Structure Mean** | 0.5470 | **0.9081** | — | **+36.11%** |
 
-| Structure | Baseline v1 DSC (`OAI_downsampled`) | Subchondral Atlas DSC (`OAI_downsampled_subchondral_atlas`) | Absolute Improvement |
-| --- | --- | --- | --- |
-| **Femur (`1`)** | 0.7130 ± 0.0673 | **0.9408 ± 0.0339** | **+22.78%** |
-| **Tibia (`3`)** | 0.7545 ± 0.0598 | **0.9669 ± 0.0129** | **+21.24%** |
-| **Patella (`5`)** | 0.5209 ± 0.0831 | **0.9639 ± 0.0210** | **+44.30%** |
-| **Femoral Cartilage (`2`)** | 0.5171 ± 0.0716 | **0.8811 ± 0.0188** | **+36.40%** |
-| **Tibial Cartilage (`4`)** | 0.4134 ± 0.0888 | **0.8698 ± 0.0230** | **+45.64%** |
-| **Patellar Cartilage (`6`)** | 0.3633 ± 0.1406 | **0.8263 ± 0.0677** | **+46.30%** |
-| **3-Bone Mean** | 0.6628 | **0.9572** | **+29.44%** |
-| **3-Cartilage Mean** | 0.4313 | **0.8591** | **+42.78%** |
-| **Overall 6-Structure Mean** | 0.5470 | **0.9081** | **+36.11%** |
-
-> **Verification Source**: Evaluated end-to-end across all 31 held-out OAI test volumes (`kneeseg/data/oai_split.json`, trained strictly on the 128 OAI training scans with zero test-set leakage and zero disk-cache lookups) through `bone_rf_p1.joblib -> bone_rf_p2.joblib -> cartilage_rf_p1.joblib -> cartilage_rf_p2.joblib` via `experiments/evaluate_final_oai.py` (`experiments/predictions_oai/evaluation_report.json`).
+> **Verification Source**: Evaluated end-to-end across all 31 held-out OAI test volumes (`kneeseg/data/oai_split.json`) through `bone_rf_p1.joblib -> bone_rf_p2.joblib -> cartilage_rf_p1.joblib -> cartilage_rf_p2.joblib` via `experiments/evaluate_final_oai.py` (`experiments/predictions_oai/evaluation_report.json`).
 
 ### Unified Cross-Domain (SKI10 + OAI) Experiment Results
 
-The unified model ([wq2012/knee_3d_mri_segmentation_SKI10_OAI_subchondral_atlas](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10_OAI_subchondral_atlas)) is trained across all 80 SKI10 training scans and 128 OAI training scans (208 training scans total, combining domain-specific multi-stage specialists with physical-volume-weighted 208-scan cross-domain bone refiners and 4D articular coordinate atlases) and evaluated end-to-end via `experiments/evaluate_final_unified.py` on both the 31 held-out OAI test scans (`experiments/predictions_unified_oai/evaluation_report.json`) and the 20 held-out SKI10 test scans (`experiments/predictions_unified_ski10/evaluation_report.json`):
+The unified model ([wq2012/knee_3d_mri_segmentation_SKI10_OAI_subchondral_atlas](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10_OAI_subchondral_atlas)) is trained across all 80 SKI10 training scans and 128 OAI training scans (208 training scans total, combining resolution-specific multi-stage specialists via `_is_oai_domain` routing with physical-volume-weighted 208-scan cross-domain bone refiners and 4D articular coordinate atlases blended at $\alpha \in [0.015, 0.02]$) and evaluated end-to-end via `experiments/evaluate_final_unified.py` on both the 31 held-out OAI test scans (`experiments/predictions_unified_oai/evaluation_report.json`) and the 20 held-out SKI10 test scans (`experiments/predictions_unified_ski10/evaluation_report.json`):
 
 | Dataset (Eval Split) | Femur (`1`) | Tibia (`3`) | Patella (`5`) | Femoral Cartilage (`2`) | Tibial Cartilage (`4`) | Patellar Cartilage (`6`) |
 | --- | --- | --- | --- | --- | --- | --- |
-| **OAI Downsampled (31 Test Scans)** | **0.9408 ± 0.0341** | **0.9670 ± 0.0130** | **0.9639 ± 0.0210** | **0.8811 ± 0.0188** | **0.8700 ± 0.0228** | **0.8262 ± 0.0679** |
-| **SKI10 Full-Resolution (20 Test Scans)** | **0.9689 ± 0.0161** | **0.9742 ± 0.0080** | *N/A (2-bone)* | **0.8025 ± 0.0505** | **0.7997 ± 0.0403** | *N/A (2-cartilage)* |
+| **OAI Downsampled (31 Test Scans, `ddof=0`)** | **0.9408 ± 0.0341** | **0.9670 ± 0.0130** | **0.9639 ± 0.0210** | **0.8811 ± 0.0188** | **0.8700 ± 0.0228** | **0.8262 ± 0.0679** |
+| **SKI10 Full-Resolution (20 Test Scans, `ddof=0`)** | **0.9689 ± 0.0161** | **0.9742 ± 0.0080** | *N/A (2-bone)* | **0.8025 ± 0.0505** | **0.7997 ± 0.0403** | *N/A (2-cartilage)* |
 
 ## Algorithm Details
 
 ### Bone Segmentation (Multi-Stage Physical-Space Auto-Context Forest)
 1.  **Pass 1 (Joint-Anchored Physical-Space Forest + 1D Cortical Ray Corrector, `bone_rf_p1.joblib`)**:
-    - **Features**: Percentile-normalized MRI intensity, multi-scale physical-space Gaussian smoothed intensities and gradient magnitudes, joint-anchored 3D coordinate frames, 3D probabilistic bone atlases, and physical-millimeter Random Shift Intensity Differences (RSID), cascaded through a 1D cortical enclosure ray global corrector.
-    - **Target**: 3-class classification (Background, Femur, Tibia) with largest-connected-component topological cleanup.
-2.  **Pass 2 (Boundary-Shell Auto-Context Refinement + Articular Surface Refiner, `bone_rf_p2.joblib`)**:
-    - **Features**: Fine-scale physical Gaussian/gradient features, Pass-1 probability maps, exact physical Signed Distance Transforms, and a 4-class subchondral articular surface refiner (`RefBone V2`: `Background`, `Bone`, `Articular Cartilage`, `Meniscus/Soft Tissue`) that resolves partial-volume blending along the femoral condyles and tibial plateau.
-    - **Performance**: Achieves **0.9689 ± 0.0161 DSC** on Femur and **0.9742 ± 0.0080 DSC** on Tibia.
+    - **Features**: Percentile-normalized MRI intensity, multi-scale physical-space Gaussian smoothed intensities and gradient magnitudes, joint-anchored 3D coordinate frames, 3D probabilistic bone atlases, and physical-millimeter Random Shift Intensity Differences (RSID), cascaded through a 1D cortical enclosure ray global corrector (plus a dedicated anterior-femur-anchored Patellofemoral Specialist on 6-structure OAI volumes).
+    - **Target**: Multi-class bone classification (`Background`, `Femur`, `Tibia`, plus `Patella` on OAI) with largest-connected-component topological cleanup and axial medullary shaft hole filling.
+2.  **Pass 2 (Boundary-Shell Auto-Context Refinement + Binary Subchondral Surface Refiner, `bone_rf_p2.joblib`)**:
+    - **Features**: Fine-scale physical Gaussian/gradient features, Pass-1 probability maps, exact physical Signed Distance Transforms, and a **binary (`Bone` vs. `Non-Bone`, `classes_ = [0, 1]`) subchondral articular surface refiner (`RefBone V2`)** operating on the boundary shell (`|d_bone| <= 3.0 mm` with 156 features on SKI10, blended with the 108-feature `RefBone V1` refiner; and `|d_bone| <= 3.0 mm` / `3.5 mm` with 158 features on OAI) that samples 1D surface-normal intensity, gradient, and local z-score profiles along $d \in [-4.5, +4.5]\,\mathrm{mm}$ to resolve partial-volume blending along the femoral condyles, tibial plateau, and patellar facets.
+    - **Performance**: Achieves **0.9689 ± 0.0161 DSC** on Femur and **0.9742 ± 0.0080 DSC** on Tibia (SKI10), and **0.9408 / 0.9669 / 0.9639 DSC** on Femur / Tibia / Patella (OAI).
 
 ### Cartilage Segmentation (Multi-Stage Semantic Context Forest & Out-of-Fold Subchondral Calibration)
 1.  **Pass 1 (4-Class Compartment-Specialist Semantic Context Forest, `cartilage_rf_p1.joblib`)**:
-    - **Features**: Exact physical-space Signed Distance Transforms (`d_F, d_T`), surface-normal ray intensity profiles (`s in [-2.5, +4.0] mm`) capturing the dark cortical bone plate and bright cartilage layer, 4D articular coordinate probabilistic atlases (medial/lateral compartment frames), 18 anatomical surface landmarks per bone, structure tensor eigenvalues, and physical-space RSID.
-    - **Target**: Explicit 4-class prediction (`Background`, `Subchondral Bone`, `Target Cartilage`, `Opposing Cartilage`) so subchondral bone cortex competes directly against cartilage along the bone-cartilage interface.
-2.  **Pass 2 & Stage 3 (Auto-Context Ensemble + 80-Train Out-Of-Fold Boundary & Subchondral Calibration, `cartilage_rf_p2.joblib`)**:
-    - **Features**: Pass-1 4-class probability maps, normal-ray probability profiles, 3D probability gradients, RSPD context offsets, and an 80-train-only 4-fold Out-Of-Fold Stage-3 boundary classifier combined with an 80-train-only `StandardScaler + Ridge` calibrator predicting per-scan decision threshold and subchondral bone penalty.
-    - **Performance**: Achieves **0.8026 ± 0.0504 DSC** on Femoral Cartilage and **0.8001 ± 0.0404 DSC** on Tibial Cartilage.
+    - **Features**: Exact physical-space Signed Distance Transforms (`d_F, d_T, d_P`), surface-normal ray intensity profiles (`s in [-2.5, +4.0] mm` / `[-3.6, +5.6] mm`) capturing the dark cortical bone plate and bright cartilage layer, Leave-One-Out 4D articular coordinate probabilistic atlases (8 lookup tables on SKI10, 11 tables on OAI across medial/lateral/patellofemoral compartment frames), 18 deterministic anatomical surface landmarks per bone, structure tensor eigenvalues, and physical-space RSID.
+    - **Target**: Explicit **4-class competitive taxonomy** (`Background`, `Subchondral Bone / Meniscus`, `Target Cartilage`, `Opposing Cartilage`) within the articular band so subchondral bone cortex and meniscus compete directly against cartilage along the bone-cartilage interface.
+2.  **Pass 2 & Stage 3 (Auto-Context Ensemble + Out-Of-Fold Boundary Refinement & Subchondral Calibration, `cartilage_rf_p2.joblib`)**:
+    - **Features**: Pass-1 4-class Out-Of-Fold probability maps, normal-ray probability profiles, 3D probability gradients, and physical-millimeter RSPD context offsets. On SKI10, Pass 2 ensembles complementary models trained on `RefBone V1` (`m_v5`), `RefBone V2` (`m_v6`), and a tibial plateau specialist (`m_v7`), followed by a 4-fold Out-Of-Fold Stage-3 boundary refiner combining three feature-family specialists across `103–167` features (`s3_clean`: `127/137` features; `f3_models`: `151/167` features; `pure_models`: `103` features) and an 80-train-only `StandardScaler + Ridge` calibrator that predicts the per-scan tibial cartilage decision threshold `th` and subchondral bone penalty `bp` from `10` and `9` selected scan-level probability and geometry statistics (out of `45` and `17` candidate statistics), while femoral cartilage uses fixed calibrated parameters. On OAI, Pass 2 is followed by a 92-feature Stage-3 compartment boundary refiner and 128-train OOF-calibrated compartment thresholds.
+    - **Performance & Runtime**: Achieves **0.8026 ± 0.0504 DSC** on Femoral Cartilage and **0.8001 ± 0.0404 DSC** on Tibial Cartilage on SKI10, and **0.8811 / 0.8698 / 0.8263 DSC** on Femoral / Tibial / Patellar Cartilage on OAI. Single-volume cold-start CPU inference runs in ~2–4 minutes (~18–25 seconds per volume amortized across multi-worker batch evaluation on a 56-core CPU workstation, with ~4–8 GB peak RAM).
 
 ## Citation
 

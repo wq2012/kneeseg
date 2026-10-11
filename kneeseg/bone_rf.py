@@ -374,7 +374,7 @@ class BoneClassifier:
                 y_c = y_clean[sample_mask]
                 return X_c, y_c
 
-            sampled = Parallel(n_jobs=min(16, max(1, len(images))), prefer='threads')(
+            sampled = Parallel(n_jobs=min(16, os.cpu_count() or 4, max(1, len(images))), prefer='threads')(
                 delayed(_sample_p1_case)(i) for i in range(len(images))
             )
             X_train = np.vstack([s[0] for s in sampled])
@@ -425,6 +425,8 @@ class BoneClassifier:
                         delayed(_zoom_p1_probs)(it[0].shape, it[1], it[2], it[3]) for it in probs_s_list
                     )
                     for (img, _, _, _), pf in zip(probs_s_list, pfs):
+                        while len(_BONE_OOF_PROB_CACHE) >= 128:
+                            _BONE_OOF_PROB_CACHE.pop(next(iter(_BONE_OOF_PROB_CACHE)), None)
                         _BONE_OOF_PROB_CACHE[_vol_fingerprint(img)] = pf
         else:
             # --- PASS 2: Full-Resolution Boundary-Shell + Pass-1 SDT Refinement ---
@@ -474,7 +476,7 @@ class BoneClassifier:
                 y_c = y_clean[sample_mask]
                 return X_c, y_c
 
-            sampled = Parallel(n_jobs=min(16, max(1, len(images))), prefer='threads')(
+            sampled = Parallel(n_jobs=min(16, os.cpu_count() or 4, max(1, len(images))), prefer='threads')(
                 delayed(_sample_p2_case)(i) for i in range(len(images))
             )
             X_train = np.vstack([s[0] for s in sampled])
@@ -590,7 +592,18 @@ class BoneClassifier:
     def _get_tierA(self):
         if not hasattr(self, '_tierA_cached') or self._tierA_cached is None:
             meta = getattr(self, 'meta', {}) or {}
-            self._tierA_cached = meta['tierA']
+            tierA = meta.get('tierA')
+            if tierA is None and 'ski10_p1' in meta and isinstance(meta['ski10_p1'], dict):
+                tierA = meta['ski10_p1'].get('tierA')
+            if tierA is None and 'ski10_p2' in meta and isinstance(meta['ski10_p2'], dict):
+                tierA = meta['ski10_p2'].get('tierA')
+            if tierA is None and getattr(self, 'model_dir', None):
+                p1_path = os.path.join(self.model_dir, 'bone_rf_p1.joblib')
+                if os.path.exists(p1_path):
+                    p1_data = joblib.load(p1_path)
+                    if isinstance(p1_data, dict):
+                        tierA = p1_data.get('tierA') or (p1_data.get('ski10_p1', {}) or {}).get('tierA')
+            self._tierA_cached = tierA
         return self._tierA_cached
 
     def _get_ref_v2(self):
@@ -599,12 +612,13 @@ class BoneClassifier:
             ref_v2 = meta.get('ref_v2')
             if ref_v2 is None and 'ski10_p2' in meta:
                 ref_v2 = meta['ski10_p2']['ref_v2']
+            max_et_jobs = min(8, os.cpu_count() or 4)
             for b in ('tibia', 'femur', 'patella'):
                 if b in ref_v2 and isinstance(ref_v2[b], dict):
                     for ek in ('et_v1', 'et_v2', 'et_whole', 'et_sub'):
                         et = ref_v2[b].get(ek)
-                        if et is not None and (getattr(et, 'n_jobs', 8) < 0 or getattr(et, 'n_jobs', 8) > 8):
-                            et.n_jobs = 8
+                        if et is not None and (getattr(et, 'n_jobs', max_et_jobs) < 0 or getattr(et, 'n_jobs', max_et_jobs) > max_et_jobs):
+                            et.n_jobs = max_et_jobs
             self._ref_v2_cached = ref_v2
         return self._ref_v2_cached
 
@@ -613,9 +627,6 @@ class BoneClassifier:
         tierA = self._get_tierA()
         p_a = predict_tierA_probs(image, spacing, tierA)
         bm_raw = predict_bones_from_probs(p_a, spacing)
-        while len(_BONE_V2_SESSION_CACHE) >= 128:
-            _BONE_V2_SESSION_CACHE.pop(next(iter(_BONE_V2_SESSION_CACHE)), None)
-        _BONE_V2_SESSION_CACHE[fp] = {'bm_raw': bm_raw, 'p_a': p_a}
 
         clean_pred = np.zeros(image.shape, dtype=np.uint8)
         clean_pred[bm_raw['femur'] > 0] = 1
@@ -625,6 +636,14 @@ class BoneClassifier:
         probs_p1[..., 1] = p_a['femur']
         probs_p1[..., 2] = p_a['tibia']
         probs_p1[..., 0] = np.clip(1.0 - probs_p1[..., 1] - probs_p1[..., 2], 0.0, 1.0)
+
+        while len(_BONE_V2_SESSION_CACHE) >= 16:
+            _BONE_V2_SESSION_CACHE.pop(next(iter(_BONE_V2_SESSION_CACHE)), None)
+        _BONE_V2_SESSION_CACHE[fp] = {
+            'bm_raw': bm_raw,
+            'p_a': p_a,
+            'prob_p1_fp': _vol_fingerprint(probs_p1),
+        }
         return clean_pred, probs_p1
 
     def _predict_v2_refiner(self, image, spacing, prob_map=None):
@@ -632,31 +651,41 @@ class BoneClassifier:
         _LAST_V2_REFINER_CLF = self
         fp = _vol_fingerprint(image)
         cached = _BONE_V2_SESSION_CACHE.get(fp)
-        if isinstance(cached, dict) and 'bm_raw' in cached:
-            bm_raw = cached['bm_raw']
-        elif (
+        has_valid_prob_map = (
             prob_map is not None
             and prob_map.ndim == 4
             and prob_map.shape[:3] == image.shape
             and prob_map.shape[3] >= 3
             and np.any(prob_map[..., 1:3] > 0.2)
-        ):
+        )
+        prob_matches_cache = (
+            isinstance(cached, dict)
+            and 'bm_raw' in cached
+            and (prob_map is None or _vol_fingerprint(prob_map) == cached.get('prob_p1_fp'))
+        )
+        if prob_matches_cache:
+            bm_raw = cached['bm_raw']
+        elif has_valid_prob_map:
             p_a = {
                 'femur': prob_map[..., 1].astype(np.float32),
                 'tibia': prob_map[..., 2].astype(np.float32),
             }
             bm_raw = predict_bones_from_probs(p_a, spacing)
+        elif isinstance(cached, dict) and 'bm_raw' in cached:
+            bm_raw = cached['bm_raw']
         else:
             tierA = self._get_tierA()
             p_a = predict_tierA_probs(image, spacing, tierA)
             bm_raw = predict_bones_from_probs(p_a, spacing)
 
         ref_v2 = self._get_ref_v2()
-        bm, bm_v1 = refine_bone_v2_single(image, spacing, bm_raw, ref_v2, return_v1=True)
+        bm, bm_v1, probs_v2 = refine_bone_v2_single(
+            image, spacing, bm_raw, ref_v2, return_v1=True, return_prob=True
+        )
         aux = {'bm_v2': bm, 'bm_v1': bm_v1, 'bm_raw': bm_raw}
-        while len(_BONE_V2_SESSION_CACHE) >= 128:
+        while len(_BONE_V2_SESSION_CACHE) >= 16:
             _BONE_V2_SESSION_CACHE.pop(next(iter(_BONE_V2_SESSION_CACHE)), None)
-        while len(_BONE_OOF_PROB_CACHE) >= 128:
+        while len(_BONE_OOF_PROB_CACHE) >= 16:
             _BONE_OOF_PROB_CACHE.pop(next(iter(_BONE_OOF_PROB_CACHE)), None)
         _BONE_V2_SESSION_CACHE[fp] = aux
         _BONE_OOF_PROB_CACHE[fp] = aux
@@ -665,9 +694,14 @@ class BoneClassifier:
         clean_pred[bm['femur'] > 0] = 1
         clean_pred[bm['tibia'] > 0] = 2
         probs_p2 = np.zeros((*image.shape, 3), dtype=np.float32)
-        probs_p2[..., 1] = (clean_pred == 1).astype(np.float32)
-        probs_p2[..., 2] = (clean_pred == 2).astype(np.float32)
-        probs_p2[..., 0] = 1.0 - probs_p2[..., 1] - probs_p2[..., 2]
+        probs_p2[..., 1] = np.clip(probs_v2['femur'], 0.0, 1.0)
+        probs_p2[..., 2] = np.clip(probs_v2['tibia'], 0.0, 1.0)
+        s_fg = probs_p2[..., 1] + probs_p2[..., 2]
+        over = s_fg > 1.0
+        if np.any(over):
+            probs_p2[over, 1] /= s_fg[over]
+            probs_p2[over, 2] /= s_fg[over]
+        probs_p2[..., 0] = np.clip(1.0 - probs_p2[..., 1] - probs_p2[..., 2], 0.0, 1.0)
         return clean_pred, probs_p2
 
     def save(self, path):
@@ -1262,16 +1296,30 @@ def extract_ray_feats_v2(img, sp, bm_pr, bone_name, bone_atlas_p, rng_jit=None):
     return shell, d_self, X_v1, X_v2
 
 
-def _refine_one_bone_v2(img, sp, bm_a, bone_name, m_d, return_v1=False):
+def _refine_one_bone_v2(img, sp, bm_a, bone_name, m_d, return_v1=False, return_prob=False):
     if np.sum(bm_a['femur'] > 0) < 20 or np.sum(bm_a['tibia'] > 0) < 20:
         m0 = (bm_a[bone_name] > 0).astype(np.uint8)
-        return (m0, m0) if return_v1 else m0
+        p0 = m0.astype(np.float32)
+        if return_v1 and return_prob:
+            return m0, m0, p0
+        if return_v1:
+            return m0, m0
+        if return_prob:
+            return m0, p0
+        return m0
     shell, d_self, X1, X2 = extract_ray_feats_v2(
         img, sp, bm_a, bone_name, m_d['p_full'], rng_jit=None
     )
     if not np.any(shell):
         m0 = (bm_a[bone_name] > 0).astype(np.uint8)
-        return (m0, m0) if return_v1 else m0
+        p0 = m0.astype(np.float32)
+        if return_v1 and return_prob:
+            return m0, m0, p0
+        if return_v1:
+            return m0, m0
+        if return_prob:
+            return m0, p0
+        return m0
     with joblib.parallel_backend('threading'):
         p1 = m_d['et_v1'].predict_proba(X1)[:, 1]
         p_et2 = m_d['et_v2'].predict_proba(X2)[:, 1]
@@ -1290,22 +1338,22 @@ def _refine_one_bone_v2(img, sp, bm_a, bone_name, m_d, return_v1=False):
     sig_s = [0.8 / sp[0], 0.35 / sp[1], 0.6 / sp[2]]
     volb = p_orig.copy()
     volb[shell] = p_bl
-    m_v2 = _postprocess_bone_mask(
-        gaussian_filter(volb, sigma=sig_s) >= 0.50
-    ).astype(np.uint8)
+    volb_s = gaussian_filter(volb, sigma=sig_s)
+    m_v2 = _postprocess_bone_mask(volb_s >= 0.50).astype(np.uint8)
+    prob_v2 = np.clip(volb_s, 0.0, 1.0).astype(np.float32)
     if not return_v1:
-        return m_v2
+        return (m_v2, prob_v2) if return_prob else m_v2
     volb1 = p_orig.copy()
     volb1[shell] = p1
     m_v1 = _postprocess_bone_mask(
         gaussian_filter(volb1, sigma=sig_s) >= 0.50
     ).astype(np.uint8)
-    return m_v2, m_v1
+    return (m_v2, m_v1, prob_v2) if return_prob else (m_v2, m_v1)
 
 
 def refine_bone_v2_single(
     image, spacing, bm_self_or_dict, bm_other_or_models,
-    bone_name=None, ref_v2_bone=None, return_v1=False,
+    bone_name=None, ref_v2_bone=None, return_v1=False, return_prob=False,
 ):
     """Run Tier-B V2 articular subchondral refiner on a single volume given Tier-A bone masks."""
     img = np.asarray(image, dtype=np.float32)
@@ -1313,18 +1361,28 @@ def refine_bone_v2_single(
     if bone_name is not None:
         other_name = 'femur' if bone_name == 'tibia' else 'tibia'
         bm_a = {bone_name: bm_self_or_dict, other_name: bm_other_or_models}
-        return _refine_one_bone_v2(img, sp, bm_a, bone_name, ref_v2_bone, return_v1=return_v1)
+        return _refine_one_bone_v2(
+            img, sp, bm_a, bone_name, ref_v2_bone, return_v1=return_v1, return_prob=return_prob
+        )
     bm_a = bm_self_or_dict
     v2_models = bm_other_or_models
-    if not return_v1:
+    if not return_v1 and not return_prob:
         return {
             b: _refine_one_bone_v2(img, sp, bm_a, b, v2_models[b], return_v1=False)
             for b in ['femur', 'tibia']
         }
     res = {
-        b: _refine_one_bone_v2(img, sp, bm_a, b, v2_models[b], return_v1=True)
+        b: _refine_one_bone_v2(
+            img, sp, bm_a, b, v2_models[b], return_v1=return_v1, return_prob=return_prob
+        )
         for b in ['femur', 'tibia']
     }
+    if return_v1 and return_prob:
+        return (
+            {b: res[b][0] for b in ['femur', 'tibia']},
+            {b: res[b][1] for b in ['femur', 'tibia']},
+            {b: res[b][2] for b in ['femur', 'tibia']},
+        )
     return (
         {b: res[b][0] for b in ['femur', 'tibia']},
         {b: res[b][1] for b in ['femur', 'tibia']},

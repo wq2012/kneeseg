@@ -205,7 +205,6 @@ def main():
         'n_oai_train': 128,
         'ski10_p2': ski10_b2,
         'oai_p2': oai_b2,
-        'oai_p1': oai_b1,
         'joint_bone_atlases_208': joint_bone_atlases,
         'joint_bone_models_208': joint_bone_models,
     }, os.path.join(unified_model_dir, 'bone_rf_p2.joblib'), compress=3)

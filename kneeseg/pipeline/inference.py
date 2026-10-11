@@ -254,12 +254,16 @@ def inference_improved(config=None):
         cart_rf_p1 = None
         cart_rf_p2 = None
 
+    import multiprocessing as mp
+
+    cpu_cnt = os.cpu_count() or 8
     use_fork_pool = (
-        isinstance(bone_rf_p1, BoneClassifier)
+        'fork' in mp.get_all_start_methods()
+        and isinstance(bone_rf_p1, BoneClassifier)
         and getattr(bone_rf_p1, 'stage', None) in ('v2_p1', 'oai_p1', 'unified_p1')
         and len(test_files) >= 4
     )
-    n_workers = min(8, len(test_files)) if use_fork_pool else 1
+    n_workers = min(8, max(1, cpu_cnt // 2), len(test_files)) if use_fork_pool else 1
     scores = {}
     _POOL_STATE.update({
         'image_dir': image_dir,
@@ -271,13 +275,11 @@ def inference_improved(config=None):
         'bone_rf_p2': bone_rf_p2,
         'cart_rf_p1': cart_rf_p1,
         'cart_rf_p2': cart_rf_p2,
-        'openmp_threads': max(1, min(14, 56 // max(n_workers, 1))) if use_fork_pool else None,
+        'openmp_threads': max(1, min(14, cpu_cnt // max(n_workers, 1))) if use_fork_pool else None,
     })
 
     print("Running Inference...")
     if use_fork_pool:
-        import multiprocessing as mp
-
         if getattr(bone_rf_p1, 'stage', None) == 'v2_p1':
             bone_rf_p1._get_tierA()
         if getattr(bone_rf_p2, 'stage', None) == 'v2_p2':
@@ -285,12 +287,13 @@ def inference_improved(config=None):
             bone_rf_p2._get_ref_v2()
         elif getattr(bone_rf_p2, 'stage', None) == 'unified_p2':
             ref_v2 = (getattr(bone_rf_p2, 'meta', {}) or {}).get('ski10_p2', {}).get('ref_v2', {})
+            max_et_jobs = min(8, cpu_cnt)
             for b in ('tibia', 'femur', 'patella'):
                 if b in ref_v2 and isinstance(ref_v2[b], dict):
                     for ek in ('et_v1', 'et_v2', 'et_whole', 'et_sub'):
                         et = ref_v2[b].get(ek)
-                        if et is not None and (getattr(et, 'n_jobs', 8) < 0 or getattr(et, 'n_jobs', 8) > 8):
-                            et.n_jobs = 8
+                        if et is not None and (getattr(et, 'n_jobs', max_et_jobs) < 0 or getattr(et, 'n_jobs', max_et_jobs) > max_et_jobs):
+                            et.n_jobs = max_et_jobs
         ctx = mp.get_context('fork')
         with ctx.Pool(n_workers) as pool:
             for f, s in tqdm(pool.imap(_process_one_file, test_files), total=len(test_files)):
