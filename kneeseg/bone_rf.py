@@ -16,8 +16,6 @@ from scipy.ndimage import (
     zoom,
 )
 from sklearn.ensemble import ExtraTreesClassifier
-from threadpoolctl import threadpool_limits
-from tqdm import tqdm
 
 from .features import compute_rsid_features, fast_signed_distance_transform
 
@@ -226,6 +224,7 @@ class BoneClassifier:
         self.max_depth = max_depth
         self.n_jobs = n_jobs
         self.stage = 1
+        self.bone_Map = {'femur': 1, 'tibia': 2}
         self.clf = ExtraTreesClassifier(
             n_estimators=n_estimators,
             max_depth=max_depth,
@@ -484,10 +483,13 @@ class BoneClassifier:
             self.clf.fit(X_train, y_train)
             _BONE_OOF_PROB_CACHE.clear()
 
-    def predict(self, image, prob_map=None, dtype='float32', spacing=None):
+    def predict(self, image, prob_map=None, dtype='float32', spacing=None, pass1_probs=None):
         """
         Predicts bone labels and probability map for a 3D volume.
         """
+        if prob_map is None and pass1_probs is not None:
+            prob_map = pass1_probs
+
         if spacing is None:
             spacing = _infer_default_spacing(image.shape)
 
@@ -664,6 +666,11 @@ class BoneClassifier:
             self.clf = data
             self.stage = 0
             self.meta = {}
+        classes = getattr(self.clf, 'classes_', []) if self.clf is not None else []
+        if len(classes) >= 4 or (3 in classes):
+            self.bone_Map = {'femur': 1, 'tibia': 2, 'patella': 3}
+        else:
+            self.bone_Map = {'femur': 1, 'tibia': 2}
 
 
 def get_or_compute_bone_v2_aux(image, spacing, bm_v2=None, model_dir=None):

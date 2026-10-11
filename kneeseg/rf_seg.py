@@ -8,7 +8,6 @@ from joblib import Parallel, delayed
 from scipy.ndimage import gaussian_filter, label
 from scipy.spatial.distance import cdist
 from sklearn.ensemble import ExtraTreesClassifier
-from tqdm import tqdm
 
 from .features import compute_signed_distance_transforms, extract_features, fast_signed_distance_transform
 
@@ -748,7 +747,7 @@ class CartilageClassifier:
         self,
         image,
         bone_masks,
-        proximity_mm=80.0,
+        proximity_mm=20.0,
         landmarks_dict=None,
         landmark_indices=None,
         dtype='float32',
@@ -813,16 +812,20 @@ class CartilageClassifier:
         self,
         image,
         bone_masks,
-        proximity_mm=80.0,
+        proximity_mm=20.0,
         landmarks_dict=None,
         landmark_indices=None,
         prob_map=None,
         dtype='float32',
         spacing=None,
+        pass1_probs=None,
     ):
         """
         Predicts cartilage labels (2=Femoral Cartilage, 4=Tibial Cartilage) and probabilities.
         """
+        if prob_map is None and pass1_probs is not None:
+            prob_map = pass1_probs
+
         if min(image.shape) < 32 or getattr(self, 'stage', 1) == 0 or self.atlas_priors is None:
             dts = compute_signed_distance_transforms(bone_masks)
             min_dt = np.min([np.abs(d) for d in dts.values()], axis=0)

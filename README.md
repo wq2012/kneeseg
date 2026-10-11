@@ -125,7 +125,8 @@ save_volume(pred_mask, 'output/prediction.mhd', metadata={'spacing': spacing})
 To use models you have trained or downloaded from Hugging Face (`wq2012/knee_3d_mri_segmentation_SKI10_subchondral_atlas`, `wq2012/knee_3d_mri_segmentation_SKI10`, or `wq2012/knee_3d_mri_segmentation_OAI_downsampled`), simply use the `load()` method. `BoneClassifier.load()` and `CartilageClassifier.load()` automatically detect both the latest Subchondral Atlas checkpoints and the v1 raw `RandomForestClassifier` checkpoints:
 
 ```python
-from kneeseg.io import load_volume
+import numpy as np
+from kneeseg.io import load_volume, save_volume
 from kneeseg.bone_rf import BoneClassifier
 from kneeseg.rf_seg import CartilageClassifier
 
@@ -145,10 +146,18 @@ cart_p2.load("path/to/cartilage_rf_p2.joblib")
 
 # 3. Run the 4-stage cascade
 pred_b1, prob_b1 = bone_p1.predict(image, spacing=spacing)
-pred_b2, _ = bone_p2.predict(image, pass1_probs=prob_b1, spacing=spacing)
+pred_b2, _ = bone_p2.predict(image, prob_map=prob_b1, spacing=spacing)
 bone_masks = {name: (pred_b2 == lbl).astype("uint8") for name, lbl in bone_p2.bone_Map.items()}
 prob_c1 = cart_p1.predict_proba_map(image, bone_masks, spacing=spacing)
-cart_pred = cart_p2.predict(image, bone_masks, pass1_probs=prob_c1, spacing=spacing)
+cart_pred, _ = cart_p2.predict(image, bone_masks, prob_map=prob_c1, spacing=spacing)
+
+# 4. Merge into final multi-class label volume (1=Femur, 2=FemCart, 3=Tibia, 4=TibCart)
+final_seg = np.zeros_like(pred_b2, dtype=np.uint8)
+final_seg[pred_b2 == 1] = 1
+final_seg[pred_b2 == 2] = 3
+final_seg[pred_b2 == 3] = 5
+final_seg[cart_pred > 0] = cart_pred[cart_pred > 0]
+save_volume(final_seg, "output/prediction-004.mhd", metadata={"spacing": spacing})
 ```
 
 ### Running the Pipeline (CLI)

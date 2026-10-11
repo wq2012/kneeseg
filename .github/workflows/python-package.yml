@@ -21,4 +21,4 @@ jobs:
         pip install .
     - name: Run Unit Tests
       run: |
-        python -m unittest discover kneeseg/tests
+        python run_tests.py

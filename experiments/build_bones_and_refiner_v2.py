@@ -20,7 +20,7 @@ if _ROOT_DIR not in sys.path:
 from kneeseg.io import load_volume
 from kneeseg.features import fast_signed_distance_transform
 from kneeseg.rf_seg import _compute_articular_landmarks_and_stats
-from kneeseg.bone_rf import BoneClassifier, _postprocess_bone_mask, _compute_shifted_diffs_3d
+from kneeseg.bone_rf import _postprocess_bone_mask, _compute_shifted_diffs_3d
 
 data_dir = os.environ.get('SKI10_DATA_DIR', '/path/to/SKI10/TrainingData')
 lbl_dir = os.environ.get('SKI10_LABEL_DIR', data_dir + '_labels')

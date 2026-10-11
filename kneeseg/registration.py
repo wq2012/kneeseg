@@ -1,4 +1,3 @@
-import numpy as np
 try:
     from pycpd import RigidRegistration, DeformableRegistration
 except ImportError:

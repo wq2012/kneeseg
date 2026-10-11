@@ -1,20 +1,15 @@
-
-import argparse
 import json
 import os
 import numpy as np
-import joblib
 from tqdm import tqdm
 from kneeseg.io import load_volume
 from kneeseg.bone_rf import BoneClassifier
 from kneeseg.rf_seg import CartilageClassifier
-from scipy.ndimage import distance_transform_edt
 from kneeseg.validate_config import validate_config
 
 def train_improved(config):
     validate_config(config)
     data_cfg = config['data_config']
-    out_cfg = config['output_config']
     model_cfg = config.get('model_config', {}) # Ensure model_cfg exists
     
     target_bones = model_cfg.get('target_bones', ['femur', 'tibia']) # Default to SKI10 legacy

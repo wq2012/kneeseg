@@ -1,8 +1,7 @@
-
 import unittest
 import numpy as np
 from kneeseg.bone_rf import BoneClassifier
-from kneeseg.features import compute_rsid_features, extract_features
+from kneeseg.features import compute_rsid_features
 
 class TestBoneRF(unittest.TestCase):
     def test_initialization(self):

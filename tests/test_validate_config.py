@@ -1,9 +1,4 @@
-
 import unittest
-import os
-import json
-import tempfile
-import shutil
 from kneeseg.validate_config import validate_config
 from jsonschema.exceptions import ValidationError
 

@@ -5,13 +5,11 @@ os.environ.setdefault('OMP_WAIT_POLICY', 'PASSIVE')
 
 from contextlib import nullcontext
 import numpy as np
-import joblib
 from tqdm import tqdm
 from kneeseg.io import load_volume, save_volume
 from kneeseg.bone_rf import BoneClassifier, _BONE_OOF_PROB_CACHE, _BONE_V2_SESSION_CACHE, _vol_fingerprint
 from kneeseg.cartilage_v6 import _CART_P1_SESSION_CACHE
 from kneeseg.rf_seg import CartilageClassifier
-from kneeseg.features import extract_features, compute_signed_distance_transforms
 from kneeseg.validate_config import validate_config
 
 def calculate_dice(pred, gt):

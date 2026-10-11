@@ -157,9 +157,12 @@ class TestOAICompatibility(unittest.TestCase):
 
     def test_no_cache_or_sys_path_hacks_in_kneeseg_package(self):
         import os
-        import kneeseg.pipeline.inference
-        import kneeseg.pipeline.train
-        import kneeseg.pipeline.run
+        import kneeseg.pipeline.inference as mod_inf
+        import kneeseg.pipeline.train as mod_trn
+        import kneeseg.pipeline.run as mod_run
+        self.assertTrue(hasattr(mod_inf, 'inference_improved'))
+        self.assertTrue(hasattr(mod_trn, 'train_improved'))
+        self.assertTrue(hasattr(mod_run, 'main'))
 
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         pkg_dir = os.path.join(base_dir, 'kneeseg')
@@ -215,18 +218,43 @@ class TestOAICompatibility(unittest.TestCase):
             b1_loaded = BoneClassifier()
             b1_loaded.load(b1_path)
             self.assertEqual(b1_loaded.stage, 0)
+            self.assertEqual(b1_loaded.bone_Map, {'femur': 1, 'tibia': 2, 'patella': 3})
             b_pred, b_prob = b1_loaded.predict(img)
             self.assertEqual(b_pred.shape, img.shape)
             self.assertEqual(b_prob.shape, (*img.shape, 4))
+
+            # Verify pass1_probs alias works on BoneClassifier.predict
+            b2_train = BoneClassifier(n_estimators=2, max_depth=3, n_jobs=1)
+            b2_train.clf = RandomForestClassifier(n_estimators=2, max_depth=3, random_state=42)
+            b2_train.train([img], [lbl_oai], prob_maps=[b_prob], subsample=200)
+            b2_path = os.path.join(tmpdir, 'bone_rf_p2.joblib')
+            joblib.dump(b2_train.clf, b2_path)
+            b2_loaded = BoneClassifier()
+            b2_loaded.load(b2_path)
+            pred_b2_a, _ = b2_loaded.predict(img, prob_map=b_prob)
+            pred_b2_b, _ = b2_loaded.predict(img, pass1_probs=b_prob)
+            np.testing.assert_array_equal(pred_b2_a, pred_b2_b)
 
             c1_loaded = CartilageClassifier()
             c1_loaded.load(c1_path)
             self.assertEqual(c1_loaded.stage, 0)
             self.assertEqual(c1_loaded.target_bones, ['femur', 'tibia', 'patella'])
-            c_prob = c1_loaded.predict_proba_map(img, bone_masks_oai, proximity_mm=20.0)
-            c_pred, _ = c1_loaded.predict(img, bone_masks_oai, proximity_mm=20.0)
+            c_prob = c1_loaded.predict_proba_map(img, bone_masks_oai)
+            c_pred, _ = c1_loaded.predict(img, bone_masks_oai)
             self.assertEqual(c_pred.shape, img.shape)
             self.assertEqual(c_prob.shape, (*img.shape, 7))
+
+            # Verify pass1_probs alias works on CartilageClassifier.predict
+            c2_train = CartilageClassifier(n_estimators=2, max_depth=3, n_jobs=1, target_bones=['femur', 'tibia', 'patella'])
+            c2_train.clf = RandomForestClassifier(n_estimators=2, max_depth=3, random_state=42)
+            c2_train.train([img], [bone_masks_oai], [lbl_oai], prob_maps=[c_prob])
+            c2_path = os.path.join(tmpdir, 'cartilage_rf_p2.joblib')
+            joblib.dump(c2_train.clf, c2_path)
+            c2_loaded = CartilageClassifier()
+            c2_loaded.load(c2_path)
+            pred_c2_a, _ = c2_loaded.predict(img, bone_masks_oai, prob_map=c_prob)
+            pred_c2_b, _ = c2_loaded.predict(img, bone_masks_oai, pass1_probs=c_prob)
+            np.testing.assert_array_equal(pred_c2_a, pred_c2_b)
 
 if __name__ == '__main__':
     unittest.main()

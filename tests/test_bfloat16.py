@@ -1,14 +1,12 @@
-
 import unittest
 import numpy as np
-import os
 try:
     import ml_dtypes
     HAS_ML_DTYPES = True
 except ImportError:
     HAS_ML_DTYPES = False
 
-from kneeseg.features import extract_features, compute_rsid_features, compute_signed_distance_transforms
+from kneeseg.features import extract_features, compute_rsid_features
 
 class TestBFloat16(unittest.TestCase):
     @unittest.skipUnless(HAS_ML_DTYPES, "ml_dtypes not installed")

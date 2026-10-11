@@ -14,9 +14,8 @@ if _EXP_DIR not in sys.path:
     sys.path.insert(0, _EXP_DIR)
 from kneeseg.io import load_volume
 from kneeseg.features import fast_signed_distance_transform
-from kneeseg.rf_seg import _compute_articular_landmarks_and_stats
 from train_cartilage_v6_ultimate import (
-    fast_keep_top_k, compute_ml_frames, compute_atlas_bins_v6,
+    fast_keep_top_k, compute_atlas_bins_v6,
     compute_case_atlas_hist_v6, make_atlas_priors_v6,
     prepare_geometry_v6, extract_features_v6, predict_p1_fast_strided_v6,
     d_grid, h_grid, dy_steps, r_steps
