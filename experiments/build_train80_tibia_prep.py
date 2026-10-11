@@ -431,11 +431,22 @@ if __name__ == '__main__':
             }
 
     all_prep = []
-    with mp.get_context('fork').Pool(16) as pool:
+    n_workers = min(16, os.cpu_count() or 4)
+    if 'fork' in mp.get_all_start_methods():
+        with mp.get_context('fork').Pool(n_workers) as pool:
+            for b_idx, start in enumerate(range(0, 80, 16)):
+                tb = time.time()
+                batch_idxs = list(range(start, start + 16))
+                batch_res = pool.map(process_train_case, batch_idxs)
+                all_prep.extend(batch_res)
+                mean_b = np.mean([r['dsc0'] for r in batch_res])
+                mean_cum = np.mean([r['dsc0'] for r in all_prep])
+                print(f"Batch {b_idx+1}/5 ({len(all_prep)}/80) done in {time.time()-tb:.1f}s | Batch TC DSC={mean_b:.5f} | Cum TC DSC={mean_cum:.5f}", flush=True)
+    else:
         for b_idx, start in enumerate(range(0, 80, 16)):
             tb = time.time()
             batch_idxs = list(range(start, start + 16))
-            batch_res = pool.map(process_train_case, batch_idxs)
+            batch_res = Parallel(n_jobs=n_workers, prefer='threads')(delayed(process_train_case)(i) for i in batch_idxs)
             all_prep.extend(batch_res)
             mean_b = np.mean([r['dsc0'] for r in batch_res])
             mean_cum = np.mean([r['dsc0'] for r in all_prep])

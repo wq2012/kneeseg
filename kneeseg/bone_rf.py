@@ -682,7 +682,17 @@ class BoneClassifier:
         bm, bm_v1, probs_v2 = refine_bone_v2_single(
             image, spacing, bm_raw, ref_v2, return_v1=True, return_prob=True
         )
-        aux = {'bm_v2': bm, 'bm_v1': bm_v1, 'bm_raw': bm_raw}
+        prob_p1_fp = (
+            cached.get('prob_p1_fp')
+            if isinstance(cached, dict) and prob_matches_cache
+            else (_vol_fingerprint(prob_map) if has_valid_prob_map else None)
+        )
+        aux = {
+            'bm_v2': bm,
+            'bm_v1': bm_v1,
+            'bm_raw': bm_raw,
+            'prob_p1_fp': prob_p1_fp,
+        }
         while len(_BONE_V2_SESSION_CACHE) >= 16:
             _BONE_V2_SESSION_CACHE.pop(next(iter(_BONE_V2_SESSION_CACHE)), None)
         while len(_BONE_OOF_PROB_CACHE) >= 16:

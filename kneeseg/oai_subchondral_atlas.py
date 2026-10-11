@@ -818,17 +818,23 @@ def predict_tierA_3bone_case(img, sp, img_s, sp_s, df_s, dt_s, dp_s, c_j, span_z
 
 def refine_one_bone_3bone_v2(
     img, sp, bm_a, bone_name, m_d, dts_pre=None, return_v1=False,
-    joint_atl=None, joint_clf=None, alpha_jb=0.0,
+    joint_atl=None, joint_clf=None, alpha_jb=0.0, return_prob=False,
 ):
     if np.sum(bm_a['femur'] > 0) < 20 or np.sum(bm_a['tibia'] > 0) < 20 or np.sum(bm_a.get(bone_name, 0) > 0) < 20:
         m0 = (bm_a.get(bone_name, np.zeros_like(img, dtype=np.uint8)) > 0).astype(np.uint8)
-        return (m0, m0) if return_v1 else m0
+        p0 = m0.astype(np.float32)
+        if return_v1:
+            return (m0, m0, p0) if return_prob else (m0, m0)
+        return (m0, p0) if return_prob else m0
     shell, d_self, d_other, X1, X2, bins_s, _ = extract_ray_feats_3bone_v2(
         img, sp, bm_a, bone_name, m_d['p_full'], dts_pre=dts_pre, return_bins=True
     )
     if not np.any(shell):
         m0 = (bm_a[bone_name] > 0).astype(np.uint8)
-        return (m0, m0) if return_v1 else m0
+        p0 = m0.astype(np.float32)
+        if return_v1:
+            return (m0, m0, p0) if return_prob else (m0, m0)
+        return (m0, p0) if return_prob else m0
 
     max_et_jobs = min(max(os.cpu_count() or 4, 1), 16)
     for et_key in ('et_v1', 'et_whole', 'et_sub'):
@@ -871,13 +877,14 @@ def refine_one_bone_3bone_v2(
     sig_s = [0.75 / sp[0], 0.55 / sp[1], 0.65 / sp[2]]
     volb = p_orig.copy()
     volb[shell] = p_bl
-    m_v2 = postprocess_3bone_mask(gaussian_filter(volb, sigma=sig_s) >= 0.50, sp, bone_name=bone_name).astype(np.uint8)
+    volb_s = gaussian_filter(volb, sigma=sig_s).astype(np.float32)
+    m_v2 = postprocess_3bone_mask(volb_s >= 0.50, sp, bone_name=bone_name).astype(np.uint8)
     if not return_v1:
-        return m_v2
+        return (m_v2, volb_s) if return_prob else m_v2
     volb1 = p_orig.copy()
     volb1[shell] = p1
     m_v1 = postprocess_3bone_mask(gaussian_filter(volb1, sigma=sig_s) >= 0.50, sp, bone_name=bone_name).astype(np.uint8)
-    return m_v2, m_v1
+    return (m_v2, m_v1, volb_s) if return_prob else (m_v2, m_v1)
 
 
 def _pack_3bone_pred_prob(bm_dict, probs_dict, img_shape):
@@ -985,17 +992,24 @@ def predict_oai_bone_p2(
     )
     bm_v2 = {}
     bm_v1 = {}
+    probs_v2 = {}
     jb_alphas = {'femur': 0.06, 'tibia': 0.15, 'patella': 0.0}
     for b_name in ('femur', 'tibia', 'patella'):
         j_atl = joint_bone_atlases.get(b_name) if isinstance(joint_bone_atlases, dict) else None
         j_clf = joint_bone_models.get(b_name) if isinstance(joint_bone_models, dict) else None
-        m2, m1 = refine_one_bone_3bone_v2(
+        m2, m1, p2 = refine_one_bone_3bone_v2(
             img_c, sp_c, bm_a, b_name, ref_v2_dict[b_name], dts_pre=dts_a, return_v1=True,
-            joint_atl=j_atl, joint_clf=j_clf, alpha_jb=jb_alphas[b_name],
+            joint_atl=j_atl, joint_clf=j_clf, alpha_jb=jb_alphas[b_name], return_prob=True,
         )
         bm_v2[b_name] = m2
         bm_v1[b_name] = m1
+        probs_v2[b_name] = p2
 
+    prob_p1_fp = (
+        cached_aux.get('prob_p1_fp')
+        if isinstance(cached_aux, dict) and prob_matches_cache
+        else (_vol_fingerprint_oai(prob_map) if has_valid_prob_map else None)
+    )
     bm_fp = tuple(_vol_fingerprint_oai(bm_v2[k]) for k in ('femur', 'tibia', 'patella'))
     while len(_OAI_BONE_AUX_CACHE) >= 16:
         _OAI_BONE_AUX_CACHE.pop(next(iter(_OAI_BONE_AUX_CACHE)), None)
@@ -1004,10 +1018,7 @@ def predict_oai_bone_p2(
         'bm_raw': bm_a,
         'bm_v1': bm_v1,
         'bm_v2': bm_v2,
-    }
-    probs_v2 = {
-        b_name: gaussian_filter(bm_v2[b_name].astype(np.float32), sigma=[0.6 / s for s in sp_c])
-        for b_name in ('femur', 'tibia', 'patella')
+        'prob_p1_fp': prob_p1_fp,
     }
     pred_c, prob_c = _pack_3bone_pred_prob(bm_v2, probs_v2, img_c.shape)
     return from_canonical_oai(pred_c, layout), from_canonical_oai(prob_c, layout)

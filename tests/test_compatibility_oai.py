@@ -482,6 +482,11 @@ class TestOAICompatibility(unittest.TestCase):
         pred_b1, prob_b1 = b1_ski.predict(img_ski, spacing=sp_ski)
         self.assertEqual(pred_b1.shape, img_ski.shape)
         self.assertEqual(prob_b1.shape, (*img_ski.shape, 3))
+        pred_b2_first, prob_b2_first = b2_ski.predict(img_ski, prob_map=prob_b1, spacing=sp_ski)
+        pred_b2_second, prob_b2_second = b2_ski.predict(img_ski, prob_map=prob_b1, spacing=sp_ski)
+        np.testing.assert_array_equal(pred_b2_first, pred_b2_second)
+        np.testing.assert_allclose(prob_b2_first, prob_b2_second, atol=1e-6)
+        self.assertIsNotNone(next(iter(_BONE_V2_SESSION_CACHE.values())).get('prob_p1_fp'))
 
         # Test custom prob_map override in Pass 2 + continuous probabilities
         custom_prob = np.zeros_like(prob_b1)
@@ -704,8 +709,12 @@ class TestOAICompatibility(unittest.TestCase):
         self.assertEqual(ub1_pred.shape, img_oai.shape)
         self.assertEqual(ub1_prob.shape, (*img_oai.shape, 4))
         ub2_pred, ub2_prob = uni_b2.predict(img_oai, prob_map=ub1_prob, spacing=sp_oai)
+        ub2_pred2, ub2_prob2 = uni_b2.predict(img_oai, prob_map=ub1_prob, spacing=sp_oai)
         self.assertEqual(ub2_pred.shape, img_oai.shape)
         self.assertEqual(ub2_prob.shape, (*img_oai.shape, 4))
+        np.testing.assert_array_equal(ub2_pred, ub2_pred2)
+        np.testing.assert_allclose(ub2_prob, ub2_prob2, atol=1e-6)
+        self.assertIsNotNone(next(iter(_OAI_BONE_AUX_CACHE.values())).get('prob_p1_fp'))
 
         bm_oai = {
             'femur': (img_oai == 160.0).astype(np.uint8),
