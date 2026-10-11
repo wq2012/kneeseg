@@ -1,14 +1,12 @@
 import json
 import os
-
-os.environ.setdefault('OMP_WAIT_POLICY', 'PASSIVE')
-
 from contextlib import nullcontext
 import numpy as np
 from tqdm import tqdm
 from kneeseg.io import load_volume, save_volume
 from kneeseg.bone_rf import BoneClassifier, _BONE_OOF_PROB_CACHE, _BONE_V2_SESSION_CACHE, _vol_fingerprint
 from kneeseg.cartilage_v6 import _CART_P1_SESSION_CACHE
+from kneeseg.oai_subchondral_atlas import _OAI_BONE_AUX_CACHE, _OAI_CART_P1_CACHE, _is_oai_domain
 from kneeseg.rf_seg import CartilageClassifier
 from kneeseg.validate_config import validate_config
 
@@ -90,6 +88,8 @@ def _process_one_file(f):
             _CART_P1_SESSION_CACHE.pop(fp, None)
             _BONE_V2_SESSION_CACHE.pop(fp, None)
             _BONE_OOF_PROB_CACHE.pop(fp, None)
+            _OAI_BONE_AUX_CACHE.clear()
+            _OAI_CART_P1_CACHE.clear()
 
         # Save Prediction (Mutually Exclusive 3D Segmentation)
         final_seg = np.zeros_like(img, dtype=np.uint8)
@@ -117,12 +117,20 @@ def _process_one_file(f):
         s = None
         if lbl is not None:
             s = {}
+            eff_target_bones = list(target_bones)
+            if (
+                getattr(bone_rf_p2, 'stage', 0) != 0
+                and min(img.shape) >= 32
+                and not _is_oai_domain(img, spacing)
+            ):
+                eff_target_bones = [b for b in eff_target_bones if b != 'patella']
+
             start_eval_keys = []
-            if 'femur' in target_bones:
+            if 'femur' in eff_target_bones:
                 start_eval_keys.extend(['Femur', 'Femoral Cartilage'])
-            if 'tibia' in target_bones:
+            if 'tibia' in eff_target_bones:
                 start_eval_keys.extend(['Tibia', 'Tibial Cartilage'])
-            if 'patella' in target_bones:
+            if 'patella' in eff_target_bones:
                 start_eval_keys.extend(['Patella', 'Patellar Cartilage'])
 
             if getattr(bone_rf_p2, 'stage', 0) == 0:
@@ -144,7 +152,7 @@ def _process_one_file(f):
                     s[name] = float(calculate_dice(curr_pred, curr_gt))
             else:
                 lbl_eval = lbl.copy()
-                if 'patella' not in target_bones:
+                if 'patella' not in eff_target_bones:
                     lbl_eval[lbl_eval == 5] = 1
                     lbl_eval[lbl_eval == 6] = 3
 
@@ -248,9 +256,10 @@ def inference_improved(config=None):
 
     use_fork_pool = (
         isinstance(bone_rf_p1, BoneClassifier)
-        and getattr(bone_rf_p1, 'stage', None) == 'v2_p1'
+        and getattr(bone_rf_p1, 'stage', None) in ('v2_p1', 'oai_p1', 'unified_p1')
         and len(test_files) >= 4
     )
+    n_workers = min(8, len(test_files)) if use_fork_pool else 1
     scores = {}
     _POOL_STATE.update({
         'image_dir': image_dir,
@@ -262,18 +271,26 @@ def inference_improved(config=None):
         'bone_rf_p2': bone_rf_p2,
         'cart_rf_p1': cart_rf_p1,
         'cart_rf_p2': cart_rf_p2,
-        'openmp_threads': 14 if use_fork_pool else None,
+        'openmp_threads': max(1, min(14, 56 // max(n_workers, 1))) if use_fork_pool else None,
     })
 
     print("Running Inference...")
     if use_fork_pool:
         import multiprocessing as mp
 
-        bone_rf_p1._get_tierA()
+        if getattr(bone_rf_p1, 'stage', None) == 'v2_p1':
+            bone_rf_p1._get_tierA()
         if getattr(bone_rf_p2, 'stage', None) == 'v2_p2':
             bone_rf_p2._get_tierA()
             bone_rf_p2._get_ref_v2()
-        n_workers = min(4, len(test_files))
+        elif getattr(bone_rf_p2, 'stage', None) == 'unified_p2':
+            ref_v2 = (getattr(bone_rf_p2, 'meta', {}) or {}).get('ski10_p2', {}).get('ref_v2', {})
+            for b in ('tibia', 'femur', 'patella'):
+                if b in ref_v2 and isinstance(ref_v2[b], dict):
+                    for ek in ('et_v1', 'et_v2', 'et_whole', 'et_sub'):
+                        et = ref_v2[b].get(ek)
+                        if et is not None and (getattr(et, 'n_jobs', 8) < 0 or getattr(et, 'n_jobs', 8) > 8):
+                            et.n_jobs = 8
         ctx = mp.get_context('fork')
         with ctx.Pool(n_workers) as pool:
             for f, s in tqdm(pool.imap(_process_one_file, test_files), total=len(test_files)):

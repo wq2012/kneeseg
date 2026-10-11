@@ -256,7 +256,94 @@ class TestOAICompatibility(unittest.TestCase):
             pred_c2_b, _ = c2_loaded.predict(img, bone_masks_oai, pass1_probs=c_prob)
             np.testing.assert_array_equal(pred_c2_a, pred_c2_b)
 
+    def test_oai_subchondral_atlas_and_unified_pipeline(self):
+        import os
+        from kneeseg.oai_subchondral_atlas import (
+            _OAI_BONE_AUX_CACHE,
+            _OAI_CART_P1_CACHE,
+            detect_oai_layout,
+            from_canonical_oai,
+            to_canonical_oai,
+        )
+
+        # Verify canonical coordinate transforms round-trip for C-order ('oai_c'), F-order ('oai_f'), and native layouts
+        zz, yy, xx = np.meshgrid(
+            np.linspace(0, 1, 112, dtype=np.float32),
+            np.linspace(0, 1, 140, dtype=np.float32),
+            np.linspace(0, 1, 140, dtype=np.float32),
+            indexing='ij',
+        )
+        smooth_f = (25.0 * zz + 50.0 * yy + 25.0 * xx).astype(np.float32)
+        smooth_c = smooth_f.ravel(order='F').reshape((112, 140, 140))
+        native_arr = np.arange(32 * 36 * 40, dtype=np.int32).reshape((32, 36, 40))
+
+        for arr, expected_layout in [(smooth_c, 'oai_c'), (smooth_f, 'oai_f'), (native_arr, 'native')]:
+            layout = detect_oai_layout(arr)
+            self.assertEqual(layout, expected_layout)
+            c_arr = to_canonical_oai(arr, layout=layout)
+            if expected_layout != 'native':
+                self.assertEqual(c_arr.shape, (112, 140, 140))
+            rt_arr = from_canonical_oai(c_arr, layout=layout)
+            np.testing.assert_allclose(arr, rt_arr, atol=1e-5)
+
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        oai_dir = os.path.join(base_dir, 'experiments', 'models_oai')
+        if all(os.path.exists(os.path.join(oai_dir, fn)) for fn in ('bone_rf_p1.joblib', 'bone_rf_p2.joblib', 'cartilage_rf_p1.joblib', 'cartilage_rf_p2.joblib')):
+            b1 = BoneClassifier()
+            b1.load(os.path.join(oai_dir, 'bone_rf_p1.joblib'))
+            b2 = BoneClassifier()
+            b2.load(os.path.join(oai_dir, 'bone_rf_p2.joblib'))
+            c1 = CartilageClassifier()
+            c1.load(os.path.join(oai_dir, 'cartilage_rf_p1.joblib'))
+            c2 = CartilageClassifier()
+            c2.load(os.path.join(oai_dir, 'cartilage_rf_p2.joblib'))
+
+            img_oai = np.zeros((36, 44, 44), dtype=np.float32)
+            img_oai[6:30, 6:18, 10:34] = 160.0
+            img_oai[6:30, 22:38, 10:34] = 150.0
+            img_oai[10:26, 8:20, 35:42] = 170.0
+            bp1, bprob1 = b1.predict(img_oai, spacing=(3.0, 3.0, 3.0))
+            self.assertEqual(bp1.shape, img_oai.shape)
+            self.assertEqual(bprob1.shape, (*img_oai.shape, 4))
+            bp2, bprob2 = b2.predict(img_oai, prob_map=bprob1, spacing=(3.0, 3.0, 3.0))
+            self.assertEqual(bp2.shape, img_oai.shape)
+            self.assertEqual(bprob2.shape, (*img_oai.shape, 4))
+
+            bm_oai = {
+                'femur': (img_oai == 160.0).astype(np.uint8),
+                'tibia': (img_oai == 150.0).astype(np.uint8),
+                'patella': (img_oai == 170.0).astype(np.uint8),
+            }
+            cprob1 = c1.predict_proba_map(img_oai, bm_oai, spacing=(3.0, 3.0, 3.0))
+            self.assertEqual(cprob1.shape, (*img_oai.shape, 7))
+            y_c2, p_c2 = c2.predict(img_oai, bm_oai, prob_map=cprob1, spacing=(3.0, 3.0, 3.0))
+            self.assertEqual(y_c2.shape, img_oai.shape)
+            self.assertEqual(p_c2.shape, (*img_oai.shape, 7))
+            _OAI_BONE_AUX_CACHE.clear()
+            _OAI_CART_P1_CACHE.clear()
+
+        uni_dir = os.path.join(base_dir, 'experiments', 'models_unified')
+        if all(os.path.exists(os.path.join(uni_dir, fn)) for fn in ('bone_rf_p1.joblib', 'bone_rf_p2.joblib', 'cartilage_rf_p1.joblib', 'cartilage_rf_p2.joblib')):
+            ub1 = BoneClassifier()
+            ub1.load(os.path.join(uni_dir, 'bone_rf_p1.joblib'))
+            ub2 = BoneClassifier()
+            ub2.load(os.path.join(uni_dir, 'bone_rf_p2.joblib'))
+            uc1 = CartilageClassifier()
+            uc1.load(os.path.join(uni_dir, 'cartilage_rf_p1.joblib'))
+            uc2 = CartilageClassifier()
+            uc2.load(os.path.join(uni_dir, 'cartilage_rf_p2.joblib'))
+
+            img_ski = np.zeros((36, 40, 40), dtype=np.float32)
+            img_ski[8:18, 6:20, 10:30] = 150.0
+            img_ski[8:18, 22:36, 10:30] = 160.0
+            s_bp1, s_prob1 = ub1.predict(img_ski, spacing=(0.5, 0.5, 0.5))
+            self.assertEqual(s_bp1.shape, img_ski.shape)
+            s_bp2, _ = ub2.predict(img_ski, prob_map=s_prob1, spacing=(0.5, 0.5, 0.5))
+            self.assertEqual(s_bp2.shape, img_ski.shape)
+
+
 if __name__ == '__main__':
     unittest.main()
+
 
 

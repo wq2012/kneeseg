@@ -760,6 +760,22 @@ class CartilageClassifier:
         if fp in _SESSION_OOF_PROB_CACHE:
             return _SESSION_OOF_PROB_CACHE.pop(fp)
 
+        if spacing is None:
+            spacing = _infer_default_spacing(image.shape)
+
+        if getattr(self, 'stage', 1) in ('oai_v6_p1', 'oai_v6_p2'):
+            from .oai_subchondral_atlas import predict_oai_cartilage_p1
+            m_d = self.meta if 'p1_folds' in self.meta else self.meta['m_v6']
+            _, pv = predict_oai_cartilage_p1(image, bone_masks, spacing, m_d)
+            return pv
+
+        if getattr(self, 'stage', 1) in ('unified_v6_p1', 'unified_v6_p2'):
+            from .oai_subchondral_atlas import predict_unified_cartilage_p1
+            _, pv = predict_unified_cartilage_p1(
+                image, bone_masks, spacing, self.meta, model_dir=getattr(self, 'model_dir', None)
+            )
+            return pv
+
         if min(image.shape) < 32 or getattr(self, 'stage', 1) == 0 or self.atlas_priors is None:
             dts = compute_signed_distance_transforms(bone_masks)
             min_dt = np.min([np.abs(d) for d in dts.values()], axis=0)
@@ -778,9 +794,6 @@ class CartilageClassifier:
             y_prob = np.zeros((*image.shape, n_cls), dtype=np.float32)
             y_prob.reshape(-1, n_cls)[mask] = y_prob_masked
             return y_prob
-
-        if spacing is None:
-            spacing = _infer_default_spacing(image.shape)
 
         if getattr(self, 'stage', 1) in ('v6_p1', 'v6_p2'):
             _, pv = self._predict_v6_p1(image, bone_masks, spacing)
@@ -821,10 +834,33 @@ class CartilageClassifier:
         pass1_probs=None,
     ):
         """
-        Predicts cartilage labels (2=Femoral Cartilage, 4=Tibial Cartilage) and probabilities.
+        Predicts cartilage labels (2=Femoral Cartilage, 4=Tibial Cartilage, 6=Patellar Cartilage) and probabilities.
         """
         if prob_map is None and pass1_probs is not None:
             prob_map = pass1_probs
+
+        if spacing is None:
+            spacing = _infer_default_spacing(image.shape)
+
+        if getattr(self, 'stage', 1) == 'oai_v6_p1':
+            from .oai_subchondral_atlas import predict_oai_cartilage_p1
+            return predict_oai_cartilage_p1(image, bone_masks, spacing, self.meta)
+
+        if getattr(self, 'stage', 1) == 'oai_v6_p2':
+            from .oai_subchondral_atlas import predict_oai_cartilage_p2
+            return predict_oai_cartilage_p2(image, bone_masks, prob_map, spacing, self.meta)
+
+        if getattr(self, 'stage', 1) == 'unified_v6_p1':
+            from .oai_subchondral_atlas import predict_unified_cartilage_p1
+            return predict_unified_cartilage_p1(
+                image, bone_masks, spacing, self.meta, model_dir=getattr(self, 'model_dir', None)
+            )
+
+        if getattr(self, 'stage', 1) == 'unified_v6_p2':
+            from .oai_subchondral_atlas import predict_unified_cartilage_p2
+            return predict_unified_cartilage_p2(
+                image, bone_masks, prob_map, spacing, self.meta, model_dir=getattr(self, 'model_dir', None)
+            )
 
         if min(image.shape) < 32 or getattr(self, 'stage', 1) == 0 or self.atlas_priors is None:
             dts = compute_signed_distance_transforms(bone_masks)
@@ -848,9 +884,6 @@ class CartilageClassifier:
             y_prob = np.zeros((*image.shape, n_cls), dtype=np.float32)
             y_prob.reshape(-1, n_cls)[mask] = y_prob_masked
             return y_pred.reshape(image.shape), y_prob
-
-        if spacing is None:
-            spacing = _infer_default_spacing(image.shape)
 
         if getattr(self, 'stage', 1) == 'v6_p1':
             return self._predict_v6_p1(image, bone_masks, spacing)
@@ -946,6 +979,28 @@ class CartilageClassifier:
     def load(self, path):
         self.model_dir = os.path.dirname(os.path.abspath(path))
         data = joblib.load(path)
+        if isinstance(data, dict) and data.get('format_version') in (
+            'oai_cartilage_v6_p1', 'oai_cartilage_v6_p2', 'unified_ski10_oai_cart_p1', 'unified_ski10_oai_cart_p2'
+        ):
+            fmt = data['format_version']
+            self.clf = None
+            self.clf_tib_spec = None
+            self.meta = data
+            self.target_bones = ['femur', 'tibia', 'patella']
+            if fmt == 'oai_cartilage_v6_p1':
+                self.stage = 'oai_v6_p1'
+                self.atlas_priors = data.get('atlas_priors', {'oai': True})
+            elif fmt == 'oai_cartilage_v6_p2':
+                self.stage = 'oai_v6_p2'
+                self.atlas_priors = data.get('m_v6', {}).get('atlas_priors', {'oai': True})
+            elif fmt == 'unified_ski10_oai_cart_p1':
+                self.stage = 'unified_v6_p1'
+                self.atlas_priors = {'unified': True}
+            else:
+                self.stage = 'unified_v6_p2'
+                self.atlas_priors = {'unified': True}
+            return
+
         if isinstance(data, dict) and 'clf' in data:
             self.clf = data['clf']
             self.clf_tib_spec = data.get('clf_tib_spec')

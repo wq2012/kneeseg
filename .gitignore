@@ -1,6 +1,9 @@
 experiments/models
+experiments/models_*
 experiments/predictions
+experiments/predictions_*
 experiments/cache
+experiments/cache_*
 *.pyc
 __pycache__
 build/

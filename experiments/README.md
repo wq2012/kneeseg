@@ -14,8 +14,13 @@ This directory contains standalone scripts to reproduce the experiments using th
 - `train_full_oof_stage3.py`: Script to train the 4-fold Out-Of-Fold 136-dim Stage-3 boundary classifier on the 80 training scans.
 - `train_tibia_calibrator_train80.py`: Script to train the 80-train-only `StandardScaler + Ridge` `(th, bp)` threshold and subchondral bone-penalty calibrator (`th_base = 0.508`, packaged into `cartilage_rf_p2.joblib`).
 - `evaluate_final_ski10.py`: End-to-end cache-free evaluation script that runs `kneeseg.pipeline.inference.inference_improved()` across all 20 held-out SKI10 volumes (`predictions/labels-*.mhd`) and writes `predictions/evaluation_report.json`.
-- `models/`: Trained model files (`bone_rf_p1.joblib`, `bone_rf_p2.joblib`, `cartilage_rf_p1.joblib`, `cartilage_rf_p2.joblib`; ignored in git).
-- `predictions/`: Prediction outputs (Ignored in git).
+- `train_oai_bones_v2.py`: Script to train the 3-Bone (`Femur`, `Tibia`, `Patella`) Pass-1 (`bone_rf_p1.joblib`) and Pass-2 Subchondral Surface Refiner (`bone_rf_p2.joblib`) strictly on the 128 OAI training scans (`kneeseg/data/oai_split.json`).
+- `train_oai_cartilage_v6.py`: Script to train the 3-Compartment (`Femoral`, `Tibial`, `Patellar` Cartilage) Pass-1 (`cartilage_rf_p1.joblib`) and Pass-2 + Stage-3 Subchondral Boundary Refiner (`cartilage_rf_p2.joblib`) strictly on the 128 OAI training scans.
+- `evaluate_final_oai.py`: End-to-end cache-free evaluation script that runs `inference_improved()` across all 31 held-out OAI test volumes (`predictions_oai/labels-*.mhd`) and writes `predictions_oai/evaluation_report.json`.
+- `train_unified_ski10_oai.py`: Script to build the unified cross-domain SKI10 + OAI model (`models_unified/`) from the 80 SKI10 training scans and 128 OAI training scans.
+- `evaluate_final_unified.py`: End-to-end cache-free evaluation script that evaluates the unified SKI10 + OAI model across both the 31 held-out OAI test scans (`predictions_unified_oai/evaluation_report.json`) and the 20 held-out SKI10 test scans (`predictions_unified_ski10/evaluation_report.json`).
+- `models/`, `models_oai/`, `models_unified/`: Trained model files (`bone_rf_p1.joblib`, `bone_rf_p2.joblib`, `cartilage_rf_p1.joblib`, `cartilage_rf_p2.joblib`; ignored in git).
+- `predictions/`, `predictions_oai/`, `predictions_unified_oai/`, `predictions_unified_ski10/`: Prediction outputs (ignored in git).
 
 ## Usage
 These scripts are wrappers around the `kneeseg` library. You should run them with a configuration file:
@@ -29,10 +34,16 @@ python3 experiments/inference.py path/to/your_config.json
 
 # Reproduce Final SKI10 20-Case Evaluation (FB=0.9689, TB=0.9742, FC=0.8026, TC=0.8001)
 python3 experiments/evaluate_final_ski10.py
+
+# Reproduce Final OAI 31-Case 6-Structure Evaluation (FB=0.9387, TB=0.9673, PB=0.9639, FC=0.8810, TC=0.8703, PC=0.8258)
+python3 experiments/evaluate_final_oai.py
+
+# Reproduce Unified Cross-Domain (SKI10 + OAI) Evaluation on Both Datasets
+python3 experiments/evaluate_final_unified.py --dataset both
 ```
 
-## Model Checkpoints (`models/`)
-All model weights are self-contained inside the 4 standard checkpoints in `experiments/models/` (published on Hugging Face at [wq2012/knee_3d_mri_segmentation_SKI10_subchondral_atlas](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10_subchondral_atlas), and also backward-compatible with [wq2012/knee_3d_mri_segmentation_SKI10](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10) and [wq2012/knee_3d_mri_segmentation_OAI_downsampled](https://huggingface.co/wq2012/knee_3d_mri_segmentation_OAI_downsampled)):
+## Model Checkpoints (`models/`, `models_oai/`, `models_unified/`)
+All model weights are self-contained inside the 4 standard checkpoints in `experiments/models/` (published on Hugging Face at [wq2012/knee_3d_mri_segmentation_SKI10_subchondral_atlas](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10_subchondral_atlas), [wq2012/knee_3d_mri_segmentation_OAI_downsampled_subchondral_atlas](https://huggingface.co/wq2012/knee_3d_mri_segmentation_OAI_downsampled_subchondral_atlas), and [wq2012/knee_3d_mri_segmentation_SKI10_OAI_subchondral_atlas](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10_OAI_subchondral_atlas), and also backward-compatible with [wq2012/knee_3d_mri_segmentation_SKI10](https://huggingface.co/wq2012/knee_3d_mri_segmentation_SKI10) and [wq2012/knee_3d_mri_segmentation_OAI_downsampled](https://huggingface.co/wq2012/knee_3d_mri_segmentation_OAI_downsampled)):
 
 1.  **`bone_rf_p1.joblib`** (Bone Pass 1, `stage='v2_p1'`):
     - **Input**: 3D MRI volume & physical voxel spacing.

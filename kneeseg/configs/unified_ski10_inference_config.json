@@ -1,0 +1,21 @@
+{
+    "data_config": {
+        "image_directory": "/path/to/SKI10/TrainingData",
+        "label_directory": "/path/to/SKI10/TrainingData_labels",
+        "split_file": "kneeseg/data/ski10_full_split.json"
+    },
+    "inference_config": {
+        "inference_proximity_mm": 10.0
+    },
+    "model_config": {
+        "target_bones": [
+            "femur",
+            "tibia",
+            "patella"
+        ],
+        "model_directory": "./experiments/models_unified"
+    },
+    "output_config": {
+        "prediction_directory": "./experiments/predictions_unified_ski10"
+    }
+}

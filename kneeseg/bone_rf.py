@@ -499,6 +499,28 @@ class BoneClassifier:
         if getattr(self, 'stage', 1) == 'v2_p2':
             return self._predict_v2_refiner(image, spacing, prob_map=prob_map)
 
+        if getattr(self, 'stage', 1) == 'oai_p1':
+            from .oai_subchondral_atlas import predict_oai_bone_p1
+            return predict_oai_bone_p1(image, spacing, self.meta)
+
+        if getattr(self, 'stage', 1) == 'oai_p2':
+            from .oai_subchondral_atlas import predict_oai_bone_p2
+            p1_d = self.meta.get('p1_dict')
+            if p1_d is None and getattr(self, 'model_dir', None):
+                p1_path = os.path.join(self.model_dir, 'bone_rf_p1.joblib')
+                if os.path.exists(p1_path):
+                    p1_d = joblib.load(p1_path)
+            ref_v2_d = self.meta.get('ref_v2') or self.meta['models']
+            return predict_oai_bone_p2(image, prob_map, spacing, ref_v2_d, p1_dict=p1_d)
+
+        if getattr(self, 'stage', 1) == 'unified_p1':
+            from .oai_subchondral_atlas import predict_unified_bone_p1
+            return predict_unified_bone_p1(image, spacing, self.meta, ski10_clf_helper=self)
+
+        if getattr(self, 'stage', 1) == 'unified_p2':
+            from .oai_subchondral_atlas import predict_unified_bone_p2
+            return predict_unified_bone_p2(image, prob_map, spacing, self.meta, ski10_clf_helper=self)
+
         if min(image.shape) < 32 or getattr(self, 'stage', 1) == 0:
             feats_flat = self.extract_bone_features(image, prob_map, target_dtype=dtype)
             y_pred = self.clf.predict(feats_flat)
@@ -574,10 +596,12 @@ class BoneClassifier:
     def _get_ref_v2(self):
         if not hasattr(self, '_ref_v2_cached') or self._ref_v2_cached is None:
             meta = getattr(self, 'meta', {}) or {}
-            ref_v2 = meta['ref_v2']
-            for b in ('tibia', 'femur'):
+            ref_v2 = meta.get('ref_v2')
+            if ref_v2 is None and 'ski10_p2' in meta:
+                ref_v2 = meta['ski10_p2']['ref_v2']
+            for b in ('tibia', 'femur', 'patella'):
                 if b in ref_v2 and isinstance(ref_v2[b], dict):
-                    for ek in ('et_v1', 'et_v2'):
+                    for ek in ('et_v1', 'et_v2', 'et_whole', 'et_sub'):
                         et = ref_v2[b].get(ek)
                         if et is not None and (getattr(et, 'n_jobs', 8) < 0 or getattr(et, 'n_jobs', 8) > 8):
                             et.n_jobs = 8
@@ -656,6 +680,24 @@ class BoneClassifier:
         global _LAST_V2_REFINER_CLF
         self.model_dir = os.path.dirname(os.path.abspath(path))
         data = joblib.load(path)
+        if isinstance(data, dict) and data.get('format_version') in (
+            'oai_3bone_v2', 'oai_3bone_refiner_v2', 'unified_ski10_oai_bone_p1', 'unified_ski10_oai_bone_p2'
+        ):
+            fmt = data['format_version']
+            self.clf = None
+            self.meta = data
+            self.bone_Map = {'femur': 1, 'tibia': 2, 'patella': 3}
+            if fmt == 'oai_3bone_v2':
+                self.stage = 'oai_p1'
+            elif fmt == 'oai_3bone_refiner_v2':
+                self.stage = 'oai_p2'
+            elif fmt == 'unified_ski10_oai_bone_p1':
+                self.stage = 'unified_p1'
+            else:
+                self.stage = 'unified_p2'
+                _LAST_V2_REFINER_CLF = self
+            return
+
         if isinstance(data, dict) and 'clf' in data:
             self.clf = data['clf']
             self.stage = data.get('stage', 1)
@@ -688,7 +730,10 @@ def get_or_compute_bone_v2_aux(image, spacing, bm_v2=None, model_dir=None):
                 clf = BoneClassifier()
                 clf.load(cand_path)
         if clf is not None:
-            clf._predict_v2_refiner(image, spacing, prob_map=None)
+            if getattr(clf, 'stage', None) == 'unified_p2':
+                clf.predict(image, prob_map=None, spacing=spacing)
+            elif getattr(clf, 'stage', None) in ('v2_p2', 'v2_refiner'):
+                clf._predict_v2_refiner(image, spacing, prob_map=None)
             cached = _BONE_V2_SESSION_CACHE.get(fp)
             if isinstance(cached, dict) and 'bm_v1' in cached and 'bm_raw' in cached:
                 return cached
