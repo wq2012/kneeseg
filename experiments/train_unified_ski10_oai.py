@@ -107,14 +107,15 @@ def main():
             coords_mm = inds.astype(np.float32) * np.array(sp, dtype=np.float32)
             bins_s, bins_m = coords_to_bone_atlas_bins_3bone(coords_mm, q50, scale, med_low_z)
             yb = (lbl[shell] == b_lbl)
+            w_vox = float(np.prod(sp))
             ct_s = np.zeros((24, 32, 24), dtype=np.float32)
             cp_s = np.zeros((24, 32, 24), dtype=np.float32)
             ct_m = np.zeros((28, 32, 24), dtype=np.float32)
             cp_m = np.zeros((28, 32, 24), dtype=np.float32)
-            np.add.at(ct_s, bins_s, 1.0)
-            np.add.at(cp_s, tuple(b[yb] for b in bins_s), 1.0)
-            np.add.at(ct_m, bins_m, 1.0)
-            np.add.at(cp_m, tuple(b[yb] for b in bins_m), 1.0)
+            np.add.at(ct_s, bins_s, w_vox)
+            np.add.at(cp_s, tuple(b[yb] for b in bins_s), w_vox)
+            np.add.at(ct_m, bins_m, w_vox)
+            np.add.at(cp_m, tuple(b[yb] for b in bins_m), w_vox)
             return ct_s, cp_s, ct_m, cp_m
 
         h_list = Parallel(n_jobs=16, prefer='threads')(delayed(hist_bone_208)(c) for c in joint_208)
@@ -160,7 +161,19 @@ def main():
         for c in joint_208
     )
     n_h = len(per_case_h_208[0])
-    tot_h_208 = [sum(h[k] for h in per_case_h_208) for k in range(n_h)]
+    vox_weights = [float(np.prod(c['sp'])) for c in joint_208]
+    is_oai_flags = [c['domain'] == 'oai' for c in joint_208]
+    w_all_sum = sum(vox_weights)
+    w_oai_sum = max(sum(w for w, is_o in zip(vox_weights, is_oai_flags) if is_o), 1e-6)
+    oai_scale = float(w_all_sum / w_oai_sum)
+    tot_h_208 = []
+    for k in range(n_h):
+        if k >= 37:
+            tot_h_208.append(sum(h[k] * w for h, w, is_o in zip(per_case_h_208, vox_weights, is_oai_flags) if is_o))
+        elif k in (25, 29, 33):
+            tot_h_208.append(sum(h[k] * w * oai_scale for h, w, is_o in zip(per_case_h_208, vox_weights, is_oai_flags) if is_o))
+        else:
+            tot_h_208.append(sum(h[k] * w for h, w in zip(per_case_h_208, vox_weights)))
     ap_joint_208 = make_atlas_priors_oai_v6(tot_h_208)
     print(f"Built 208-Scan Joint Cross-Domain 4D Articular Cartilage Atlas in {time.time() - t_c:.1f}s", flush=True)
 

@@ -35,7 +35,7 @@ python3 experiments/inference.py path/to/your_config.json
 # Reproduce Final SKI10 20-Case Evaluation (FB=0.9689, TB=0.9742, FC=0.8026, TC=0.8001)
 python3 experiments/evaluate_final_ski10.py
 
-# Reproduce Final OAI 31-Case 6-Structure Evaluation (FB=0.9387, TB=0.9673, PB=0.9639, FC=0.8810, TC=0.8703, PC=0.8258)
+# Reproduce Final OAI 31-Case 6-Structure Evaluation (FB=0.9408, TB=0.9669, PB=0.9639, FC=0.8811, TC=0.8698, PC=0.8263)
 python3 experiments/evaluate_final_oai.py
 
 # Reproduce Unified Cross-Domain (SKI10 + OAI) Evaluation on Both Datasets

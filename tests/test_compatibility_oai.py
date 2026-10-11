@@ -341,6 +341,50 @@ class TestOAICompatibility(unittest.TestCase):
             s_bp2, _ = ub2.predict(img_ski, prob_map=s_prob1, spacing=(0.5, 0.5, 0.5))
             self.assertEqual(s_bp2.shape, img_ski.shape)
 
+    def test_oai_rsid_sign_sparse_layout_and_joint_priors(self):
+        from kneeseg.bone_rf import _compute_shifted_diffs_3d as rsid_bone_rf
+        from kneeseg.oai_subchondral_atlas import (
+            _blend_joint_atlas_priors,
+            _compute_shifted_diffs_3d as rsid_oai,
+            detect_oai_layout,
+        )
+
+        # 1. Verify RSID feature sign matches bone_rf._compute_shifted_diffs_3d (base - shifted)
+        rng = np.random.RandomState(123)
+        vol = rng.randn(16, 20, 20).astype(np.float32)
+        z_i = np.array([4, 8, 12])
+        y_i = np.array([5, 10, 15])
+        x_i = np.array([6, 11, 14])
+        offsets = np.array([[2.0, -3.0, 4.0], [-4.0, 2.0, -2.0]], dtype=np.float32)
+        sp = (1.0, 2.0, 2.0)
+        d1 = rsid_bone_rf(vol, z_i, y_i, x_i, offsets, sp)
+        d2 = rsid_oai(vol, z_i, y_i, x_i, offsets, sp)
+        np.testing.assert_allclose(d1, d2, atol=1e-6)
+
+        # 2. Verify detect_oai_layout handles sparse C-order masks whose non-zero voxels lie outside [:32, :64, :64]
+        sparse_f = np.zeros((112, 140, 140), dtype=np.uint8)
+        sparse_f[45:75, 70:110, 80:120] = 1
+        sparse_c = sparse_f.ravel(order='F').reshape((112, 140, 140))
+        self.assertEqual(np.sum(sparse_c[:32, :64, :64]), 0)
+        self.assertEqual(detect_oai_layout(sparse_c), 'oai_c')
+        self.assertEqual(detect_oai_layout(sparse_f), 'oai_f')
+
+        # 3. Verify _blend_joint_atlas_priors blends shared femur/tibia keys while preserving patella keys
+        ap_base = {
+            'pf_fml_fc': np.ones((2, 2), dtype=np.float32) * 0.2,
+            'pt_ml_tc': np.ones((2, 2), dtype=np.float32) * 0.4,
+            'pp_ml_pc': np.ones((2, 2), dtype=np.float32) * 0.8,
+        }
+        ap_joint = {
+            'pf_fml_fc': np.ones((2, 2), dtype=np.float32) * 0.6,
+            'pt_ml_tc': np.ones((2, 2), dtype=np.float32) * 0.8,
+            'pp_ml_pc': np.zeros((2, 2), dtype=np.float32),
+        }
+        blended = _blend_joint_atlas_priors(ap_base, ap_joint, alpha=0.25)
+        np.testing.assert_allclose(blended['pf_fml_fc'], 0.30, atol=1e-6)
+        np.testing.assert_allclose(blended['pt_ml_tc'], 0.50, atol=1e-6)
+        np.testing.assert_allclose(blended['pp_ml_pc'], 0.80, atol=1e-6)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1281,6 +1281,11 @@ def _refine_one_bone_v2(img, sp, bm_a, bone_name, m_d, return_v1=False):
         + 0.25 * p_et2
     )
     p_bl = 0.35 * p1 + 0.65 * p2
+    joint_clf = m_d.get('joint_clf')
+    joint_alpha = float(m_d.get('joint_alpha', 0.0))
+    if joint_clf is not None and joint_alpha > 0.0:
+        p_jb = joint_clf.predict_proba(X1)[:, 1]
+        p_bl = (1.0 - joint_alpha) * p_bl + joint_alpha * p_jb
     p_orig = 1.0 / (1.0 + np.exp(np.clip(d_self / 0.4, -20.0, 20.0)))
     sig_s = [0.8 / sp[0], 0.35 / sp[1], 0.6 / sp[2]]
     volb = p_orig.copy()

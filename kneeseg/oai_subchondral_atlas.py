@@ -54,6 +54,10 @@ def detect_oai_layout(arr):
         sub = sub[..., 0]
     mad0 = float(np.mean(np.abs(np.diff(sub, axis=0))))
     mad2 = float(np.mean(np.abs(np.diff(sub, axis=2))))
+    if mad0 + mad2 < 1e-5:
+        full = np.asarray(arr[..., 0] if arr.ndim > 3 else arr, dtype=np.float32)
+        mad0 = float(np.mean(np.abs(np.diff(full, axis=0))))
+        mad2 = float(np.mean(np.abs(np.diff(full, axis=2))))
     if mad0 / max(mad2, 1e-5) > 2.0:
         return 'oai_c'
     return 'oai_f'
@@ -168,7 +172,7 @@ def _compute_shifted_diffs_3d(img_norm, z_idx, y_idx, x_idx, offsets, sp):
         sz = np.clip(z_idx + int(round(dz / sp[0])), 0, Z - 1)
         sy = np.clip(y_idx + int(round(dy / sp[1])), 0, Y - 1)
         sx = np.clip(x_idx + int(round(dx / sp[2])), 0, X - 1)
-        out[:, k] = img_norm[sz, sy, sx] - base
+        out[:, k] = base - img_norm[sz, sy, sx]
     return out
 
 
@@ -572,7 +576,7 @@ def _get_bone_d_self_other(bm_pr, bone_name, sp, dts_pre=None):
         return dp, df, dt, dp, 25.0
 
 
-def extract_ray_feats_3bone_v2(img, sp, bm_pr, bone_name, bone_atlas_p, dts_pre=None):
+def extract_ray_feats_3bone_v2(img, sp, bm_pr, bone_name, bone_atlas_p, dts_pre=None, return_bins=False):
     from .rf_seg import _compute_articular_landmarks_and_stats
     d_self, d_other, dt_raw, dp_raw, max_other = _get_bone_d_self_other(bm_pr, bone_name, sp, dts_pre)
 
@@ -583,7 +587,11 @@ def extract_ray_feats_3bone_v2(img, sp, bm_pr, bone_name, bone_atlas_p, dts_pre=
 
     shell = np.abs(d_self) <= 3.0
     if not np.any(shell):
-        return shell, d_self, d_other, np.zeros((0, 108), dtype=np.float32), np.zeros((0, 158), dtype=np.float32)
+        empty_x1 = np.zeros((0, 108), dtype=np.float32)
+        empty_x2 = np.zeros((0, 158), dtype=np.float32)
+        if return_bins:
+            return shell, d_self, d_other, empty_x1, empty_x2, None, None
+        return shell, d_self, d_other, empty_x1, empty_x2
     inds = np.argwhere(shell)
     z_idx, y_idx, x_idx = inds[:, 0], inds[:, 1], inds[:, 2]
     nz_m, ny_m, nx_m = nz[z_idx, y_idx, x_idx], ny[z_idx, y_idx, x_idx], nx[z_idx, y_idx, x_idx]
@@ -695,6 +703,8 @@ def extract_ray_feats_3bone_v2(img, sp, bm_pr, bone_name, bone_atlas_p, dts_pre=
         ]),
         ray_zb[:, 3:16], vy_lat, vyg_lat, vy_zb,
     ]).astype(np.float32)
+    if return_bins:
+        return shell, d_self, d_other, X_v1, X_v2, bins_s, bins_m
     return shell, d_self, d_other, X_v1, X_v2
 
 
@@ -804,12 +814,15 @@ def predict_tierA_3bone_case(img, sp, img_s, sp_s, df_s, dt_s, dp_s, c_j, span_z
     return {'femur': fb_mask, 'tibia': tb_mask, 'patella': pb_mask}, {'femur': pf_up, 'tibia': pt_up, 'patella': pp_up, 'c_j': c_j, 'span_z': span_z}
 
 
-def refine_one_bone_3bone_v2(img, sp, bm_a, bone_name, m_d, dts_pre=None, return_v1=False):
+def refine_one_bone_3bone_v2(
+    img, sp, bm_a, bone_name, m_d, dts_pre=None, return_v1=False,
+    joint_atl=None, joint_clf=None, alpha_jb=0.0,
+):
     if np.sum(bm_a['femur'] > 0) < 20 or np.sum(bm_a['tibia'] > 0) < 20 or np.sum(bm_a.get(bone_name, 0) > 0) < 20:
         m0 = (bm_a.get(bone_name, np.zeros_like(img, dtype=np.uint8)) > 0).astype(np.uint8)
         return (m0, m0) if return_v1 else m0
-    shell, d_self, d_other, X1, X2 = extract_ray_feats_3bone_v2(
-        img, sp, bm_a, bone_name, m_d['p_full'], dts_pre=dts_pre
+    shell, d_self, d_other, X1, X2, bins_s, _ = extract_ray_feats_3bone_v2(
+        img, sp, bm_a, bone_name, m_d['p_full'], dts_pre=dts_pre, return_bins=True
     )
     if not np.any(shell):
         m0 = (bm_a[bone_name] > 0).astype(np.uint8)
@@ -839,6 +852,18 @@ def refine_one_bone_3bone_v2(img, sp, bm_a, bone_name, m_d, dts_pre=None, return
     p2_non = 0.30 * p1 + 0.70 * p_whole
     p_bl = w_art * p2_art + (1.0 - w_art) * p2_non
 
+    if joint_clf is not None and alpha_jb > 0.0:
+        X1_j = X1.copy()
+        if joint_atl is not None and bins_s is not None:
+            X1_j[:, 6] = joint_atl[0][bins_s]
+        p_jb = joint_clf.predict_proba(X1_j)[:, 1].astype(np.float32)
+        if bone_name == 'femur':
+            dp_m = X2[:, X1.shape[1] + 5]
+            w_jb = float(alpha_jb) * np.clip((dp_m - 22.0) / 4.0, 0.0, 1.0)
+        else:
+            w_jb = float(alpha_jb)
+        p_bl = (1.0 - w_jb) * p_bl + w_jb * p_jb
+
     p_orig = 1.0 / (1.0 + np.exp(np.clip(d_self / 0.45, -20.0, 20.0)))
     sig_s = [0.75 / sp[0], 0.55 / sp[1], 0.65 / sp[2]]
     volb = p_orig.copy()
@@ -865,6 +890,9 @@ def _pack_3bone_pred_prob(bm_dict, probs_dict, img_shape):
     prob_vol[pred_mask == 1, 1] = np.maximum(prob_vol[pred_mask == 1, 1], 0.75)
     prob_vol[pred_mask == 2, 2] = np.maximum(prob_vol[pred_mask == 2, 2], 0.75)
     prob_vol[pred_mask == 3, 3] = np.maximum(prob_vol[pred_mask == 3, 3], 0.75)
+    prob_vol[pred_mask != 1, 1] = np.minimum(prob_vol[pred_mask != 1, 1], 0.40)
+    prob_vol[pred_mask != 2, 2] = np.minimum(prob_vol[pred_mask != 2, 2], 0.40)
+    prob_vol[pred_mask != 3, 3] = np.minimum(prob_vol[pred_mask != 3, 3], 0.35)
     s_fg = prob_vol[..., 1] + prob_vol[..., 2] + prob_vol[..., 3]
     over = s_fg > 1.0
     if np.any(over):
@@ -894,13 +922,18 @@ def predict_oai_bone_p1(img, spacing, model_dict):
         pat_models_list=model_dict.get('pat_models'), pat_atl=model_dict.get('pat_atl_full')
     )
     fp_c = _vol_fingerprint_oai(img_c)
+    while len(_OAI_BONE_AUX_CACHE) >= 16:
+        _OAI_BONE_AUX_CACHE.pop(next(iter(_OAI_BONE_AUX_CACHE)), None)
     _OAI_BONE_AUX_CACHE[fp_c] = {'bm_raw': bm_a}
 
     pred_c, prob_c = _pack_3bone_pred_prob(bm_a, probs_a, img_c.shape)
     return from_canonical_oai(pred_c, layout), from_canonical_oai(prob_c, layout)
 
 
-def predict_oai_bone_p2(img, prob_map, spacing, ref_v2_dict, p1_dict=None):
+def predict_oai_bone_p2(
+    img, prob_map, spacing, ref_v2_dict, p1_dict=None,
+    joint_bone_atlases=None, joint_bone_models=None,
+):
     """Run Pass-2 Tier-B Subchondral Surface Refiner for all 3 bones on an OAI volume."""
     layout = detect_oai_layout(img)
     img_c = to_canonical_oai(img, layout=layout).astype(np.float32)
@@ -931,12 +964,22 @@ def predict_oai_bone_p2(img, prob_map, spacing, ref_v2_dict, p1_dict=None):
     )
     bm_v2 = {}
     bm_v1 = {}
+    jb_alphas = {'femur': 0.06, 'tibia': 0.15, 'patella': 0.0}
     for b_name in ('femur', 'tibia', 'patella'):
-        m2, m1 = refine_one_bone_3bone_v2(img_c, sp_c, bm_a, b_name, ref_v2_dict[b_name], dts_pre=dts_a, return_v1=True)
+        j_atl = joint_bone_atlases.get(b_name) if isinstance(joint_bone_atlases, dict) else None
+        j_clf = joint_bone_models.get(b_name) if isinstance(joint_bone_models, dict) else None
+        m2, m1 = refine_one_bone_3bone_v2(
+            img_c, sp_c, bm_a, b_name, ref_v2_dict[b_name], dts_pre=dts_a, return_v1=True,
+            joint_atl=j_atl, joint_clf=j_clf, alpha_jb=jb_alphas[b_name],
+        )
         bm_v2[b_name] = m2
         bm_v1[b_name] = m1
 
+    bm_fp = tuple(_vol_fingerprint_oai(bm_v2[k]) for k in ('femur', 'tibia', 'patella'))
+    while len(_OAI_BONE_AUX_CACHE) >= 16:
+        _OAI_BONE_AUX_CACHE.pop(next(iter(_OAI_BONE_AUX_CACHE)), None)
     _OAI_BONE_AUX_CACHE[fp_c] = {
+        'bm_fp': bm_fp,
         'bm_raw': bm_a,
         'bm_v1': bm_v1,
         'bm_v2': bm_v2,
@@ -2106,6 +2149,24 @@ def resolve_3cartilage_masks(
     return y_pred, pv
 
 
+def _blend_joint_atlas_priors(ap_base, ap_joint, alpha=0.015):
+    if ap_joint is None or alpha <= 0.0:
+        return ap_base
+    w = float(alpha)
+    out = dict(ap_base)
+    shared_keys = (
+        'pt_old_tc', 'pt_old_fc', 'pt_ml_tc', 'pt_ml_fc', 'pt_mly_tc',
+        'pt_sep_tc', 'pt_sep_fc', 'pt_wide_tc',
+        'p2d_ml_tc', 'edt_ml_2d', 'p2d_sep_tc', 'edt_sep_2d', 'p2d_wide_tc', 'edt_wide_2d',
+        'pf_old_fc', 'pf_old_tc', 'pf_fml_fc', 'pf_fml_tc', 'pf_sep_fc', 'pf_sep_tc',
+        'p3d_fml_fc', 'edf_fml_3d',
+    )
+    for k in shared_keys:
+        if k in out and k in ap_joint and out[k].shape == ap_joint[k].shape:
+            out[k] = ((1.0 - w) * out[k] + w * ap_joint[k]).astype(np.float32)
+    return out
+
+
 def _get_canonical_3bones_and_dts(img_c, sp_c, bone_masks, layout):
     from .rf_seg import _compute_articular_landmarks_and_stats
     fp_c = _vol_fingerprint_oai(img_c)
@@ -2115,14 +2176,19 @@ def _get_canonical_3bones_and_dts(img_c, sp_c, bone_masks, layout):
     }
     if 'patella' not in bm_in:
         bm_in['patella'] = np.zeros_like(img_c, dtype=np.uint8)
+    bm_fp = tuple(_vol_fingerprint_oai(bm_in[k]) for k in ('femur', 'tibia', 'patella'))
 
+    bm_v2 = bm_in
     aux = _OAI_BONE_AUX_CACHE.get(fp_c)
-    if aux is not None and 'bm_v2' in aux and 'bm_v1' in aux and 'bm_raw' in aux:
-        bm_v2 = aux['bm_v2']
+    if (
+        aux is not None
+        and 'bm_v1' in aux
+        and 'bm_raw' in aux
+        and aux.get('bm_fp') == bm_fp
+    ):
         bm_v1 = aux['bm_v1']
         bm_raw = aux['bm_raw']
     else:
-        bm_v2 = bm_in
         bm_v1 = bm_in
         bm_raw = bm_in
 
@@ -2148,18 +2214,19 @@ def _get_canonical_3bones_and_dts(img_c, sp_c, bone_masks, layout):
     p_st, _, p_cp = _compute_articular_landmarks_and_stats(bm_v2['patella'], dp2, df2, 25.0, sp_c)
     ml_i = compute_ml_frames_3bone(bm_v2, df2, dt2, sp_c)
     lm = (f_st, f_cp, t_st, t_cp, p_st, p_cp, ml_i)
-    return bm_v2, bm_v1, bm_raw, dts, lm
+    return bm_v2, bm_v1, bm_raw, dts, lm, bm_fp
 
 
-def predict_oai_cartilage_p1(img, bone_masks, spacing, model_dict):
+def predict_oai_cartilage_p1(img, bone_masks, spacing, model_dict, joint_atlas_priors=None, joint_alpha=0.015):
     """Run Pass-1 3-cartilage inference on an OAI volume."""
     layout = detect_oai_layout(img)
     img_c = to_canonical_oai(img, layout=layout).astype(np.float32)
     sp_c = (1.0, 1.0, 1.0) if layout != 'native' else tuple(float(s) for s in (spacing or (1.0, 1.0, 1.0)))
     fp_c = _vol_fingerprint_oai(img_c)
 
-    bm_v2, bm_v1, bm_raw, dts, lm = _get_canonical_3bones_and_dts(img_c, sp_c, bone_masks, layout)
+    bm_v2, bm_v1, bm_raw, dts, lm, bm_fp = _get_canonical_3bones_and_dts(img_c, sp_c, bone_masks, layout)
     ap = model_dict['atlas_priors']
+    ap_fp = float(ap['pf_fml_fc'].ravel()[0])
     p1_folds = model_dict['p1_folds']
 
     geos = {}
@@ -2170,7 +2237,11 @@ def predict_oai_cartilage_p1(img, bone_masks, spacing, model_dict):
         )
         pm1[c_name] = _p1_folds_screened_oai(geos[c_name], p1_folds[c_name])
 
+    while len(_OAI_CART_P1_CACHE) >= 8:
+        _OAI_CART_P1_CACHE.pop(next(iter(_OAI_CART_P1_CACHE)), None)
     _OAI_CART_P1_CACHE[fp_c] = {
+        'bm_fp': bm_fp,
+        'ap_fp': ap_fp,
         'pm1': pm1,
         'geos': geos,
         'dts': dts,
@@ -2184,6 +2255,20 @@ def predict_oai_cartilage_p1(img, bone_masks, spacing, model_dict):
     pv_c[..., 4] = pm1['tibia'][..., 2]
     pv_c[..., 5] = pm1['patella'][..., 1]
     pv_c[..., 6] = pm1['patella'][..., 2]
+    if joint_atlas_priors is not None and joint_alpha > 0.0:
+        u_sh = geos['femur']['shell'] | geos['tibia']['shell']
+        inds_u = np.argwhere(u_sh)
+        if len(inds_u) > 0:
+            uz0, uy0, ux0 = np.maximum(inds_u.min(axis=0) - 2, 0)
+            uz1, uy1, ux1 = np.minimum(inds_u.max(axis=0) + 3, img_c.shape)
+            sl_p1 = (slice(uz0, uz1), slice(uy0, uy1), slice(ux0, ux1))
+            ap_j = _blend_joint_atlas_priors(ap, joint_atlas_priors, alpha=1.0)
+            pr_j = compute_roi_priors_oai(
+                sl_p1, sp_c, dts[0], dts[1], dts[2], lm[0], lm[3], lm[4], lm[6], ap_j
+            )
+            w_j = float(joint_alpha)
+            pv_c[sl_p1][..., 2] = (1.0 - w_j) * pv_c[sl_p1][..., 2] + w_j * pr_j['a_new_fc']
+            pv_c[sl_p1][..., 4] = (1.0 - w_j) * pv_c[sl_p1][..., 4] + w_j * pr_j['a_new_tc']
     s_fg = np.sum(pv_c[..., 1:], axis=-1)
     over = s_fg > 1.0
     if np.any(over):
@@ -2192,14 +2277,14 @@ def predict_oai_cartilage_p1(img, bone_masks, spacing, model_dict):
     pv_c[..., 0] = np.clip(1.0 - np.sum(pv_c[..., 1:], axis=-1), 0.0, 1.0)
 
     pred_c = np.zeros(img_c.shape, dtype=np.uint8)
-    pf, pt, pp = pm1['femur'][..., 2], pm1['tibia'][..., 2], pm1['patella'][..., 2]
+    pf, pt, pp = pv_c[..., 2], pv_c[..., 4], pv_c[..., 6]
     pred_c[(pf >= 0.48) & (pf >= pt) & (pf >= pp)] = 2
     pred_c[(pt >= 0.48) & (pt > pf) & (pt >= pp)] = 4
     pred_c[(pp >= 0.48) & (pp > pf) & (pp > pt)] = 6
     return from_canonical_oai(pred_c, layout), from_canonical_oai(pv_c, layout)
 
 
-def predict_oai_cartilage_p2(img, bone_masks, prob_map, spacing, model_dict):
+def predict_oai_cartilage_p2(img, bone_masks, prob_map, spacing, model_dict, joint_atlas_priors=None, joint_alpha=0.015):
     """Run Pass-2 Auto-Context + Stage-3 Boundary & Subchondral Refiner 3-cartilage inference."""
     layout = detect_oai_layout(img)
     img_c = to_canonical_oai(img, layout=layout).astype(np.float32)
@@ -2208,14 +2293,30 @@ def predict_oai_cartilage_p2(img, bone_masks, prob_map, spacing, model_dict):
 
     m_v6 = model_dict['m_v6']
     ap = m_v6['atlas_priors']
+    ap_fp = float(ap['pf_fml_fc'].ravel()[0])
+
+    bm_in_fp = tuple(
+        _vol_fingerprint_oai(
+            to_canonical_oai((bone_masks[k] > 0).astype(np.uint8), layout=layout)
+            if (k in bone_masks and bone_masks[k] is not None)
+            else np.zeros_like(img_c, dtype=np.uint8)
+        )
+        for k in ('femur', 'tibia', 'patella')
+    )
     cached = _OAI_CART_P1_CACHE.get(fp_c)
-    if cached is not None and 'pm1' in cached and 'geos' in cached:
+    if (
+        cached is not None
+        and 'pm1' in cached
+        and 'geos' in cached
+        and cached.get('bm_fp') == bm_in_fp
+        and cached.get('ap_fp') == ap_fp
+    ):
         pm1 = cached['pm1']
         geos = cached['geos']
         dts = cached['dts']
         lm = cached['lm']
     else:
-        bm_v2, bm_v1, bm_raw, dts, lm = _get_canonical_3bones_and_dts(img_c, sp_c, bone_masks, layout)
+        bm_v2, bm_v1, bm_raw, dts, lm, bm_fp = _get_canonical_3bones_and_dts(img_c, sp_c, bone_masks, layout)
         geos = {}
         pm1 = {}
         for c_name in ('femur', 'tibia', 'patella'):
@@ -2223,7 +2324,9 @@ def predict_oai_cartilage_p2(img, bone_masks, prob_map, spacing, model_dict):
                 img_c, sp_c, bm_v2, bm_v1, bm_raw, c_name, ap, dts_pre=dts, landmarks_pre=lm
             )
             pm1[c_name] = _p1_folds_screened_oai(geos[c_name], m_v6['p1_folds'][c_name])
-        _OAI_CART_P1_CACHE[fp_c] = {'pm1': pm1, 'geos': geos, 'dts': dts, 'lm': lm}
+        while len(_OAI_CART_P1_CACHE) >= 8:
+            _OAI_CART_P1_CACHE.pop(next(iter(_OAI_CART_P1_CACHE)), None)
+        _OAI_CART_P1_CACHE[fp_c] = {'bm_fp': bm_fp, 'ap_fp': ap_fp, 'pm1': pm1, 'geos': geos, 'dts': dts, 'lm': lm}
 
     pm1_opp_f = combine_tp_for_femur(pm1['tibia'], pm1['patella'], dts[1], dts[2])
     pm2 = {
@@ -2281,6 +2384,15 @@ def predict_oai_cartilage_p2(img, bone_masks, prob_map, spacing, model_dict):
                 ).astype(np.float32)
             s3_scores[c_name] = (cand, p_s3)
 
+    if joint_atlas_priors is not None and joint_alpha > 0.0:
+        ap_j = _blend_joint_atlas_priors(ap, joint_atlas_priors, alpha=joint_alpha)
+        priors_j = compute_roi_priors_oai(
+            sl, sp_c, dts[0], dts[1], dts[2], lm[0], lm[3], lm[4], lm[6], ap_j
+        )
+        priors_roi = dict(priors_roi)
+        priors_roi['a_new_fc'] = priors_j['a_new_fc']
+        priors_roi['a_new_tc'] = priors_j['a_new_tc']
+
     y_pred_c, pv_c = resolve_3cartilage_masks(
         img_c.shape, sl, sp_c, df2, dt2, dp2,
         pm1['femur'][sl], pm1['tibia'][sl], pm1['patella'][sl],
@@ -2317,32 +2429,56 @@ def predict_unified_bone_p2(img, prob_map, spacing, model_dict, ski10_clf_helper
     """Unified SKI10+OAI Pass-2 Subchondral Surface Refiner Bone inference."""
     if _is_oai_domain(img, spacing):
         ref_v2_d = model_dict['oai_p2'].get('ref_v2') or model_dict['oai_p2']['models']
-        return predict_oai_bone_p2(img, prob_map, spacing, ref_v2_d, p1_dict=model_dict.get('oai_p1'))
+        return predict_oai_bone_p2(
+            img, prob_map, spacing, ref_v2_d,
+            p1_dict=model_dict.get('oai_p1'),
+            joint_bone_atlases=model_dict.get('joint_bone_atlases_208'),
+            joint_bone_models=model_dict.get('joint_bone_models_208'),
+        )
     from .bone_rf import BoneClassifier
     helper = BoneClassifier()
     helper.stage = 'v2_p2'
-    helper.meta = model_dict['ski10_p2']
-    helper._tierA_cached = model_dict['ski10_p2']['tierA']
+    ski10_meta = dict(model_dict['ski10_p2'])
+    if 'joint_bone_models_208' in model_dict and 'ref_v2' in ski10_meta:
+        jb_models = model_dict['joint_bone_models_208']
+        jb_atls = model_dict.get('joint_bone_atlases_208', {})
+        ref_v2_u = {k: dict(v) for k, v in ski10_meta['ref_v2'].items()}
+        if 'tibia' in ref_v2_u and 'tibia' in jb_models:
+            ref_v2_u['tibia']['joint_clf'] = jb_models['tibia']
+            ref_v2_u['tibia']['joint_atl'] = jb_atls.get('tibia')
+            ref_v2_u['tibia']['joint_alpha'] = 0.02
+        ski10_meta['ref_v2'] = ref_v2_u
+    helper.meta = ski10_meta
+    helper._tierA_cached = ski10_meta['tierA']
     helper._ref_v2_cached = None
     return helper._predict_v2_refiner(img, spacing, prob_map=prob_map)
 
 
 def predict_unified_cartilage_p1(img, bone_masks, spacing, model_dict, model_dir=None):
     """Unified SKI10+OAI Pass-1 Cartilage inference."""
+    ap_joint = model_dict.get('joint_atlas_priors_208')
     if _is_oai_domain(img, spacing):
-        return predict_oai_cartilage_p1(img, bone_masks, spacing, model_dict['oai_p1'])
+        return predict_oai_cartilage_p1(
+            img, bone_masks, spacing, model_dict['oai_p1'],
+            joint_atlas_priors=ap_joint, joint_alpha=0.015,
+        )
     from .cartilage_v6 import predict_cartilage_v6_p1
     ski10_p1 = model_dict['ski10_p1']
     p1_folds = ski10_p1.get('p1_folds') or ski10_p1['m_v6']['p1_folds']
-    ap = ski10_p1.get('atlas_priors') or ski10_p1['m_v6']['atlas_priors']
+    ap_base = ski10_p1.get('atlas_priors') or ski10_p1['m_v6']['atlas_priors']
     bm_2 = {'femur': bone_masks['femur'], 'tibia': bone_masks['tibia']}
-    return predict_cartilage_v6_p1(img, bm_2, spacing, p1_folds, ap, model_dir=model_dir)
+    return predict_cartilage_v6_p1(img, bm_2, spacing, p1_folds, ap_base, model_dir=model_dir)
 
 
 def predict_unified_cartilage_p2(img, bone_masks, prob_map, spacing, model_dict, model_dir=None):
     """Unified SKI10+OAI Pass-2 Auto-Context + Stage-3 Subchondral Refiner Cartilage inference."""
+    ap_joint = model_dict.get('joint_atlas_priors_208')
     if _is_oai_domain(img, spacing):
-        return predict_oai_cartilage_p2(img, bone_masks, prob_map, spacing, model_dict['oai_p2'])
+        return predict_oai_cartilage_p2(
+            img, bone_masks, prob_map, spacing, model_dict['oai_p2'],
+            joint_atlas_priors=ap_joint, joint_alpha=0.015,
+        )
     from .cartilage_v6 import predict_cartilage_v6_p2
+    ski10_p2 = model_dict['ski10_p2']
     bm_2 = {'femur': bone_masks['femur'], 'tibia': bone_masks['tibia']}
-    return predict_cartilage_v6_p2(img, bm_2, spacing, model_dict['ski10_p2'], prob_map=prob_map, model_dir=model_dir)
+    return predict_cartilage_v6_p2(img, bm_2, spacing, ski10_p2, prob_map=prob_map, model_dir=model_dir)
