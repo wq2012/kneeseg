@@ -78,7 +78,7 @@ The Osteoarthritis Initiative dataset, refactored to extend the SKI10 schema.
 
 ## Pretrained Models
 
-We provide pretrained models for SKI10, downsampled OAI, and unified cross-domain (SKI10 + OAI) in our [Knee MRI Segmentation Hugging Face Collection](https://huggingface.co/collections/wq2012/knee-mri-segmentation) under the **MIT License**. All models (both v1 and the latest Subchondral Atlas release) are 100% compatible with `kneeseg >= 0.2.4`.
+We provide pretrained models for SKI10, downsampled OAI, and unified cross-domain (SKI10 + OAI) in our [Knee MRI Segmentation Hugging Face Collection](https://huggingface.co/collections/wq2012/knee-mri-segmentation) under the **MIT License**. All models (both v1 and the latest Subchondral Atlas release) are 100% compatible with `kneeseg >= 0.2.5`.
 
 ### SKI10 (4 Structures)
 
@@ -91,7 +91,7 @@ Models supporting segmentation of femur, tibia, femoral cartilage, and tibial ca
 
 Models trained on the 128 OAI training images (`kneeseg/data/oai_split.json`), supporting 6-structure segmentation of femur, tibia, patella, femoral cartilage, tibial cartilage, and patellar cartilage:
 
-* **[wq2012/knee_3d_mri_segmentation_OAI_downsampled_subchondral_atlas](https://huggingface.co/wq2012/knee_3d_mri_segmentation_OAI_downsampled_subchondral_atlas)** (**Recommended for OAI**): 3-Bone Pass-0/Tier-A Physical-Space Forest + Patellofemoral Specialist + 158-Feature Binary Subchondral Surface Refiner (`RefBone V2`) + 3-Compartment 11-Table 4D Articular Coordinate Atlas & 92-Feature Stage-3 Subchondral Boundary Refiner (trained on the 128 OAI training volumes; achieves **94.08% Femur DSC**, **96.69% Tibia DSC**, **96.39% Patella DSC**, **88.11% Femoral Cartilage DSC**, **86.98% Tibial Cartilage DSC**, and **82.63% Patellar Cartilage DSC** on the 31 held-out OAI evaluation volumes).
+* **[wq2012/knee_3d_mri_segmentation_OAI_downsampled_subchondral_atlas](https://huggingface.co/wq2012/knee_3d_mri_segmentation_OAI_downsampled_subchondral_atlas)** (**Recommended for OAI**): 3-Bone Pass-0/Tier-A Physical-Space Forest + Patellofemoral Specialist + 158-Feature Binary Subchondral Surface Refiner (`RefBone V2`) + 3-Compartment 11-Table 4D Articular Coordinate Atlas & 101-Feature Stage-3 Subchondral Boundary Refiner (trained on the 128 OAI training volumes; achieves **94.08% Femur DSC**, **96.69% Tibia DSC**, **96.39% Patella DSC**, **88.11% Femoral Cartilage DSC**, **86.98% Tibial Cartilage DSC**, and **82.63% Patellar Cartilage DSC** on the 31 held-out OAI evaluation volumes).
 * [wq2012/knee_3d_mri_segmentation_OAI_downsampled](https://huggingface.co/wq2012/knee_3d_mri_segmentation_OAI_downsampled) (Baseline v1): Dense Auto-Context Random Forest & Semantic Context Forest trained on the 128 OAI training images.
 
 ### Unified Cross-Domain SKI10 + OAI (4 / 6 Structures)
